@@ -12,4 +12,12 @@ tests/ (pruebas funcionales)
 
 docs/ (diagramas, decisiones, evidencias)
 
+<<<<<<< HEAD
 data/ (prueba locales)
+=======
+data/ (prueba locales)
+
+para crear carpetas automátimaticamente usar comando
+
+make create_dirs
+>>>>>>> DeivDev
