@@ -1,4 +1,4 @@
-﻿# Result Schema (v1.0) — AI vs Real
+﻿# Result Schema — AI vs Real
 
 Este documento define el esquema estándar de resultados por imagen para garantizar consistencia entre:
 - GUI (Streamlit)
