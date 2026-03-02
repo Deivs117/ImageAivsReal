@@ -13,3 +13,7 @@ tests/ (pruebas funcionales)
 docs/ (diagramas, decisiones, evidencias)
 
 data/ (prueba locales)
+
+para crear carpetas automátimaticamente usar comando
+
+make create_dirs
