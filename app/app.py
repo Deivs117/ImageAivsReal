@@ -2,11 +2,10 @@ import streamlit as st
 
 
 def render_header():
-    st.title("Prototipo: Clasificación de Imágenes (IA vs Real)")
+    st.title("Prototipo: clasificación de Imágenes (IA vs Real)")
     st.write(
         "Interfaz web (MVP) para apoyar la **clasificación probabilística** de imágenes como "
         "**Generadas por IA** o **Reales**, usando un modelo preentrenado en modo inferencia "
-        "(sin fine-tuning)."
     )
 
 
