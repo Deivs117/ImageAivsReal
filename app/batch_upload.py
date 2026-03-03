@@ -1,0 +1,145 @@
+import uuid
+from dataclasses import dataclass
+from typing import List, Optional, Literal
+
+import streamlit as st
+
+
+Status = Literal["pending", "processing", "done", "error"]
+
+
+@dataclass
+class BatchImage:
+    """Estructura interna mínima para cada imagen del lote."""
+    id: str
+    filename: str
+    content: bytes
+    status: Status = "pending"
+    error_message: Optional[str] = None
+    
+    # Campos E1 (se llenan luego cuando haya inferencia)
+    timestamp: Optional[str] = None
+    predicted_label: Optional[str] = None
+    prob_ai: Optional[float] = None
+    prob_real: Optional[float] = None
+    preprocess_time_ms: Optional[float] = None
+    inference_time_ms: Optional[float] = None
+
+
+class BatchStore:
+    """
+    Maneja el almacenamiento del lote en st.session_state para que persista
+    entre reruns de Streamlit.
+    """
+    KEY = "batch_images"
+
+    def __init__(self) -> None:
+        if self.KEY not in st.session_state:
+            st.session_state[self.KEY] = []
+
+    def items(self) -> List[BatchImage]:
+        return st.session_state[self.KEY]
+
+    def clear(self) -> None:
+        st.session_state[self.KEY] = []
+
+    def remove(self, image_id: str) -> None:
+        st.session_state[self.KEY] = [x for x in self.items() if x.id != image_id]
+
+    def add_uploaded_files(self, uploaded_files) -> None:
+        """
+        Agrega archivos al lote evitando duplicados simples por (filename, size_bytes).
+        Streamlit ya filtra por extensión con type=[...], pero aquí también
+        validamos carga/bytes.
+        """
+        if not uploaded_files:
+            return
+
+        existing_keys = {(x.filename, len(x.content)) for x in self.items()}
+
+        for f in uploaded_files:
+            try:
+                content = f.getvalue()
+                if not content:
+                    # archivo vacío o lectura fallida
+                    self.items().append(
+                        BatchImage(
+                            id=str(uuid.uuid4()),
+                            filename=f.name,
+                            content=b"",
+                            status="error",
+                            error_message="Archivo vacío o no se pudo leer.",
+                        )
+                    )
+                    continue
+
+                key = (f.name, len(content))
+                if key in existing_keys:
+                    continue
+
+                self.items().append(
+                    BatchImage(
+                        id=str(uuid.uuid4()),
+                        filename=f.name,
+                        content=content,
+                        status="pending",
+                    )
+                )
+                existing_keys.add(key)
+
+            except Exception as e:
+                self.items().append(
+                    BatchImage(
+                        id=str(uuid.uuid4()),
+                        filename=getattr(f, "name", "unknown"),
+                        content=b"",
+                        status="error",
+                        error_message=str(e),
+                    )
+                )
+
+
+class BatchUploader:
+    """
+    Componente POO de UI: muestra el widget de carga y prepara el lote.
+    """
+    def __init__(self, store: BatchStore) -> None:
+        self.store = store
+
+    def render(self) -> None:
+        uploaded_files = st.file_uploader(
+            "Sube una o varias imágenes (JPG/JPEG/PNG)",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True,
+        )
+
+        # Validación básica de "existencia/carga"
+        if uploaded_files:
+            self.store.add_uploaded_files(uploaded_files)
+
+        # Controles y resumen
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.write(f"**Imágenes en lote:** {len(self.store.items())}")
+        with col2:
+            if st.button("Limpiar lote", use_container_width=True):
+                self.store.clear()
+                st.rerun()
+
+        # Lista simple del lote (nombre + estado inicial)
+        if not self.store.items():
+            st.caption("Aún no has cargado imágenes.")
+            return
+
+        for it in self.store.items():
+            row = st.columns([4, 2, 1])
+            with row[0]:
+                st.write(it.filename)
+                if it.status == "error" and it.error_message:
+                    st.caption(f"❌ {it.error_message}")
+            with row[1]:
+                st.write(f"Estado: **{it.status}**")
+            with row[2]:
+                if st.button("Quitar", key=f"rm_{it.id}"):
+                    self.store.remove(it.id)
+                    st.rerun()
