@@ -8,7 +8,7 @@ create_dirs:
 
 grpc:
 	@echo "gRPC stubs generating..."
-	@if not exist proto\generated mkdir proto\generated
+	@mkdir -p proto/generated
 	@uv run python -m grpc_tools.protoc -I proto --python_out=proto/generated --grpc_python_out=proto/generated proto/inference.proto
 	@echo "gRPC stubs generated in proto/generated/"
 
