@@ -1,5 +1,4 @@
 ﻿.venv/
-proto/generated/
 
 __pycache__/
 *.pyc
