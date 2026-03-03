@@ -16,6 +16,14 @@ class BatchImage:
     content: bytes
     status: Status = "pending"
     error_message: Optional[str] = None
+    
+    # Campos E1 (se llenan luego cuando haya inferencia)
+    timestamp: Optional[str] = None
+    predicted_label: Optional[str] = None
+    prob_ai: Optional[float] = None
+    prob_real: Optional[float] = None
+    preprocess_time_ms: Optional[float] = None
+    inference_time_ms: Optional[float] = None
 
 
 class BatchStore:

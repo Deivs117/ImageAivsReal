@@ -1,5 +1,6 @@
 import streamlit as st
-from batch_upload import BatchStore, BatchUploader  # <- nuevo import
+from batch_upload import BatchStore, BatchUploader  
+from result_table import ResultsTableBuilder
 
 
 def render_header():
@@ -31,9 +32,18 @@ def render_sections():
     uploader.render()
 
     # 2) Resultados (placeholder)
-    st.header("2) Resultados (pendiente)")
-    st.caption("Aquí se mostrará la predicción por imagen, confianza y tiempos.")
-    st.info("📌 Placeholder: tabla + cards")
+    st.header("2) Resultados")
+    builder = ResultsTableBuilder()
+    df = builder.from_batch_items(store.items())
+    st.dataframe(df, use_container_width = True)
+    
+    st.download_button(
+      "Descargar CSV",
+      data=builder.to_csv_bytes(df),
+      file_name="resultados_ai_vs_real.csv",
+      mime="text/csv",
+      use_container_width=True,
+    )
 
     # 3) Exportación (placeholder CSV + PDF)
     st.header("3) Exportación (pendiente)")
