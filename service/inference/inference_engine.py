@@ -1,5 +1,9 @@
 import os
+
+from dotenv import load_dotenv
 from model_loader import init_inference_artifacts
+
+load_dotenv()
 
 hf_model_id = os.getenv("HF_MODEL_ID", "").strip()
 print("HF_MODEL_ID:", hf_model_id)
