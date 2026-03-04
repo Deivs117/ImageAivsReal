@@ -90,7 +90,7 @@ endif
 
 inference:
 	@echo "Running inference script..."
-	uv run service//inference_engine.py
+	uv run service/inference/inference_engine.py
 
 mlflow:
 	@echo "Running MLflow tracking server..."
