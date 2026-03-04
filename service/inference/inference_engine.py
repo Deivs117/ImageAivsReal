@@ -1,5 +1,5 @@
 import os
-from service.inference.model_loader import init_inference_artifacts
+from model_loader import init_inference_artifacts
 
 hf_model_id = os.getenv("HF_MODEL_ID", "").strip()
 print("HF_MODEL_ID:", hf_model_id)

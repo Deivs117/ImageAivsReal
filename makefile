@@ -72,6 +72,25 @@ else
 endif
 
 # ============================================
+# INFERENCE
+# ============================================
+
+link_model:
+	@$env:HF_MODEL_ID="dima806/ai_vs_real_image_detection"
+
+inference:
+	@echo "Running inference script..."
+	uv run service//inference_engine.py
+
+mlflow:
+	@echo "Running MLflow tracking server..."
+	mlflow ui --host 127.0.0.1 --port 5000
+
+healthcheck:
+	@echo "Running health check..."
+	uv run service/inference/mlflow_health_check.py
+
+# ============================================
 # LIMPIEZA
 # ============================================
 
