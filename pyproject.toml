@@ -21,6 +21,9 @@ dependencies = [
     "grpcio>=1.78.0",
     "grpcio-tools>=1.78.0,<1.79",
     "protobuf>=6.31.1,<7.0",
+
+    # --- Configuración ---
+    "python-dotenv>=1.0.0",
 ]
 
 [dependency-groups]
