@@ -57,8 +57,8 @@ flowchart LR
   U[Usuario] -->|Carga imágenes| S[Streamlit GUI]
   S -->|Analizar| GC[gRPC Client Adapter]
   GC -->|Request: bytes + metadata| GS[gRPC Inference Server]
-  GS --> ML[ModelLoader + Processor]
   GS --> IE[InferenceEngine]
+  IE --> ML[ModelLoader + Processor]
   IE --> GS
   GS -->|Response: label + probs + tiempos + estado| GC
   GC --> S
