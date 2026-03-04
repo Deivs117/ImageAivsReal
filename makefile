@@ -59,7 +59,7 @@ endif
 
 grpc-server:
 	@echo "Starting gRPC inference server..."
-	uv run services/inference_server.py
+	uv run service/inference_server.py
 
 clean-grpc:
 	@echo "Removing gRPC generated stubs..."

@@ -11,7 +11,7 @@ import pytest
 
 import inference_pb2
 import inference_pb2_grpc
-from services.inference_server import serve
+from service.inference_server import serve
 
 
 @pytest.fixture(scope='module')
