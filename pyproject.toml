@@ -7,20 +7,18 @@ requires-python = ">=3.11"
 dependencies = [
     # --- Interfaz web ---
     "streamlit>=1.45.0",
-
     # --- Inferencia / Modelos IA ---
     "transformers>=4.52.0",
     "torch>=2.7.0",
     "accelerate>=1.7.0",
-
     # --- Procesamiento de imágenes y datos ---
     "Pillow>=11.2.1",
     "pandas>=2.2.3",
-
     # --- gRPC (comunicación cliente-servidor) ---
     "grpcio>=1.78.0",
     "grpcio-tools>=1.78.0,<1.79",
     "protobuf>=6.31.1,<7.0",
+    "mlflow>=3.10.0",
 ]
 
 [dependency-groups]
