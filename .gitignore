@@ -1,4 +1,4 @@
-﻿# Entorno virtual
+# Entorno virtual
 venv/
 env/
 ENV/
@@ -29,3 +29,7 @@ proto/generated/
 
 # uv - Python package manager
 uv.lock
+
+# Variables de entorno (permitir .env en desarrollo; ignorar variantes de producción)
+.env.production
+.env.local
