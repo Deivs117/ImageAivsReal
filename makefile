@@ -1,4 +1,4 @@
-.PHONY: help install clean clean-grpc grpc grpc-server test gui
+.PHONY: help install clean clean-grpc grpc grpc-server test gui link_model healthcheck inference mlflow
 
 # Detectar SO
 UNAME := $(shell uname)
@@ -26,6 +26,10 @@ help:
 	@echo "  make clean-grpc   - Limpiar stubs gRPC generados"
 	@echo "  make clean        - Limpiar todo (__pycache__, .pytest_cache, proto/generated)"
 	@echo "  make test         - Ejecutar tests con pytest"
+	@echo "  make inference    - Ejecutar script de inferencia"
+	@echo "  make mlflow       - Iniciar servidor de MLflow UI"
+	@echo "  make link_model   - Establecer HF_MODEL_ID y ejecutar health check"
+	@echo "  make healthcheck  - Ejecutar health check del modelo MLflow"
 
 # ============================================
 # INSTALACIÓN Y DEPENDENCIAS
@@ -76,7 +80,13 @@ endif
 # ============================================
 
 link_model:
-	@$env:HF_MODEL_ID="dima806/ai_vs_real_image_detection"
+ifeq ($(OS),Windows_NT)
+	@echo "Setting HF_MODEL_ID and running health check..."
+	@cmd /c "set HF_MODEL_ID=dima806/ai_vs_real_image_detection && uv run -m service.inference.mlflow_health_check"
+else
+	@echo "Setting HF_MODEL_ID and running health check..."
+	HF_MODEL_ID=dima806/ai_vs_real_image_detection uv run -m service.inference.mlflow_health_check
+endif
 
 inference:
 	@echo "Running inference script..."
@@ -88,7 +98,7 @@ mlflow:
 
 healthcheck:
 	@echo "Running health check..."
-	uv run service/inference/mlflow_health_check.py
+	uv run -m service.inference.mlflow_health_check
 
 # ============================================
 # LIMPIEZA
