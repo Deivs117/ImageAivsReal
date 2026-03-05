@@ -54,7 +54,7 @@ def mock_model():
 
 
 # ---------------------------------------------------------------------------
-# Tests - Estructura del output (existentes, sin cambios)
+# Tests - Estructura del output exitoso (actualizados - issue #12)
 # ---------------------------------------------------------------------------
 
 class TestRunInferenceOutput:
@@ -62,6 +62,14 @@ class TestRunInferenceOutput:
     def test_retorna_dict(self, rgb_image, mock_model, mock_processor):
         result = run_inference(rgb_image, mock_model, mock_processor)
         assert isinstance(result, dict)
+
+    def test_tiene_clave_status(self, rgb_image, mock_model, mock_processor):
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        assert "status" in result
+
+    def test_status_ok_en_caso_exitoso(self, rgb_image, mock_model, mock_processor):
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        assert result["status"] == "ok"
 
     def test_tiene_clave_label(self, rgb_image, mock_model, mock_processor):
         result = run_inference(rgb_image, mock_model, mock_processor)
@@ -74,6 +82,14 @@ class TestRunInferenceOutput:
     def test_tiene_clave_scores(self, rgb_image, mock_model, mock_processor):
         result = run_inference(rgb_image, mock_model, mock_processor)
         assert "scores" in result
+
+    def test_tiene_clave_error(self, rgb_image, mock_model, mock_processor):
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        assert "error" in result
+
+    def test_error_es_none_en_caso_exitoso(self, rgb_image, mock_model, mock_processor):
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        assert result["error"] is None
 
     def test_scores_es_dict(self, rgb_image, mock_model, mock_processor):
         result = run_inference(rgb_image, mock_model, mock_processor)
@@ -91,7 +107,7 @@ class TestRunInferenceOutput:
 
 
 # ---------------------------------------------------------------------------
-# Tests - Valores del output (existentes, sin cambios)
+# Tests - Valores del output
 # ---------------------------------------------------------------------------
 
 class TestRunInferenceLabel:
@@ -127,110 +143,131 @@ class TestRunInferenceLabel:
 
 
 # ---------------------------------------------------------------------------
-# Tests - Entrada bytes (existentes, sin cambios)
+# Tests - Entrada bytes
 # ---------------------------------------------------------------------------
 
 class TestRunInferenceDesdeBytes:
 
     def test_acepta_bytes_png_validos(self, valid_image_bytes, mock_model, mock_processor):
         result = run_inference(valid_image_bytes, mock_model, mock_processor)
+        assert result["status"] == "ok"
         assert "label" in result
 
-    def test_bytes_invalidos_lanza_value_error(self, mock_model, mock_processor):
-        with pytest.raises(ValueError, match="No se pudo decodificar los bytes"):
-            run_inference(b"datos_invalidos", mock_model, mock_processor)
+    def test_bytes_invalidos_retorna_error_controlado(self, mock_model, mock_processor):
+        result = run_inference(b"datos_invalidos", mock_model, mock_processor)
+        assert result["status"] == "error"
+        assert result["error"]["code"] == "INVALID_IMAGE"
+        assert result["label"] is None
+        assert result["scores"] == {{}}
 
 
 # ---------------------------------------------------------------------------
-# Tests - Manejo de errores (existentes, sin cambios)
+# Tests - Manejo de errores controlados (actualizados - issue #12)
 # ---------------------------------------------------------------------------
 
-class TestRunInferenceErrores:
+class TestRunInferenceErroresControlados:
 
-    def test_tipo_invalido_lanza_type_error(self, mock_model, mock_processor):
-        with pytest.raises(TypeError, match="Se esperaba PIL.Image.Image o bytes"):
-            run_inference("ruta/imagen.jpg", mock_model, mock_processor)
+    def test_tipo_invalido_retorna_error_controlado(self, mock_model, mock_processor):
+        result = run_inference("ruta/imagen.jpg", mock_model, mock_processor)
+        assert result["status"] == "error"
+        assert result["error"]["code"] == "INVALID_IMAGE"
+        assert result["label"] is None
 
-    def test_modelo_falla_lanza_runtime_error(self, rgb_image, mock_processor):
+    def test_modelo_falla_retorna_error_controlado(self, rgb_image, mock_processor):
         broken_model = MagicMock(side_effect=Exception("CUDA out of memory"))
         broken_model.config.id2label = {0: "AI", 1: "Real"}
-        with pytest.raises(RuntimeError, match="Error durante la inferencia del modelo"):
-            run_inference(rgb_image, broken_model, mock_processor)
+        result = run_inference(rgb_image, broken_model, mock_processor)
+        assert result["status"] == "error"
+        assert result["error"]["code"] == "INFERENCE_ERROR"
+        assert "CUDA out of memory" in result["error"]["message"]
 
-    def test_modelo_sin_logits_lanza_value_error(self, rgb_image, mock_processor):
+    def test_modelo_sin_logits_retorna_error_controlado(self, rgb_image, mock_processor):
         bad_model = MagicMock()
         bad_model.return_value = SimpleNamespace(hidden_states=torch.zeros(1, 10))
         bad_model.config.id2label = {0: "AI", 1: "Real"}
-        with pytest.raises(ValueError, match="El modelo no retorno 'logits'"):
-            run_inference(rgb_image, bad_model, mock_processor)
+        result = run_inference(rgb_image, bad_model, mock_processor)
+        assert result["status"] == "error"
+        assert result["error"]["code"] == "INFERENCE_ERROR"
+
+    def test_error_tiene_clave_code(self, mock_model, mock_processor):
+        result = run_inference("tipo_invalido", mock_model, mock_processor)
+        assert "code" in result["error"]
+        assert isinstance(result["error"]["code"], str)
+
+    def test_error_tiene_clave_message(self, mock_model, mock_processor):
+        result = run_inference("tipo_invalido", mock_model, mock_processor)
+        assert "message" in result["error"]
+        assert isinstance(result["error"]["message"], str)
+
+    def test_error_scores_es_dict_vacio(self, mock_model, mock_processor):
+        result = run_inference(b"bytes_corruptos", mock_model, mock_processor)
+        assert result["scores"] == {{}}
+
+    def test_error_label_id_es_none(self, mock_model, mock_processor):
+        result = run_inference(b"bytes_corruptos", mock_model, mock_processor)
+        assert result["label_id"] is None
+
+    def test_error_tiene_timing_con_zeros(self, mock_model, mock_processor):
+        result = run_inference(b"bytes_corruptos", mock_model, mock_processor)
+        timing = result["timing"]
+        assert "timing" in result
+        assert timing["inference_ms"] == 0.0
+
+    def test_proceso_continua_tras_imagen_invalida(self, rgb_image, mock_model, mock_processor):
+        result_malo = run_inference(b"corrupto", mock_model, mock_processor)
+        result_bueno = run_inference(rgb_image, mock_model, mock_processor)
+        assert result_malo["status"] == "error"
+        assert result_bueno["status"] == "ok"
 
 
 # ---------------------------------------------------------------------------
-# Tests - Timing (NUEVOS - issue #11)
+# Tests - Timing (issue #11, sin cambios)
 # ---------------------------------------------------------------------------
 
 class TestRunInferenceTiming:
 
     def test_tiene_clave_timing(self, rgb_image, mock_model, mock_processor):
-        # Arrange / Act
         result = run_inference(rgb_image, mock_model, mock_processor)
-        # Assert
         assert "timing" in result
 
     def test_timing_es_dict(self, rgb_image, mock_model, mock_processor):
-        # Arrange / Act
         result = run_inference(rgb_image, mock_model, mock_processor)
-        # Assert
         assert isinstance(result["timing"], dict)
 
     def test_timing_tiene_preprocessing_ms(self, rgb_image, mock_model, mock_processor):
-        # Arrange / Act
         result = run_inference(rgb_image, mock_model, mock_processor)
-        # Assert
         assert "preprocessing_ms" in result["timing"]
 
     def test_timing_tiene_inference_ms(self, rgb_image, mock_model, mock_processor):
-        # Arrange / Act
         result = run_inference(rgb_image, mock_model, mock_processor)
-        # Assert
         assert "inference_ms" in result["timing"]
 
     def test_timing_tiene_total_ms(self, rgb_image, mock_model, mock_processor):
-        # Arrange / Act
         result = run_inference(rgb_image, mock_model, mock_processor)
-        # Assert
         assert "total_ms" in result["timing"]
 
     def test_timing_valores_son_floats(self, rgb_image, mock_model, mock_processor):
-        # Arrange / Act
         result = run_inference(rgb_image, mock_model, mock_processor)
         timing = result["timing"]
-        # Assert
         assert isinstance(timing["preprocessing_ms"], float)
         assert isinstance(timing["inference_ms"], float)
         assert isinstance(timing["total_ms"], float)
 
     def test_timing_valores_son_positivos(self, rgb_image, mock_model, mock_processor):
-        # Arrange / Act
         result = run_inference(rgb_image, mock_model, mock_processor)
         timing = result["timing"]
-        # Assert
         assert timing["preprocessing_ms"] >= 0.0
         assert timing["inference_ms"] >= 0.0
         assert timing["total_ms"] >= 0.0
 
     def test_total_ms_es_suma_de_partes(self, rgb_image, mock_model, mock_processor):
-        # Arrange / Act
         result = run_inference(rgb_image, mock_model, mock_processor)
         timing = result["timing"]
-        # Assert
         expected = round(timing["preprocessing_ms"] + timing["inference_ms"], 3)
         assert abs(timing["total_ms"] - expected) < 0.01
 
     def test_timing_tiene_3_decimales(self, rgb_image, mock_model, mock_processor):
-        # Arrange / Act
         result = run_inference(rgb_image, mock_model, mock_processor)
         timing = result["timing"]
-        # Assert
         for key, val in timing.items():
             assert round(val, 3) == val, f"{key} tiene mas de 3 decimales: {val}"
