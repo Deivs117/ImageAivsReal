@@ -2,7 +2,8 @@
 Modulo de inferencia central para el modelo dima806/ai_vs_real_image_detection.
 
 Funcion reutilizable que ejecuta el modelo sobre una imagen y retorna
-la prediccion (clase ganadora) y las probabilidades por clase en formato
+la prediccion (clase ganadora), las probabilidades por clase y los tiempos
+de preprocesamiento e inferencia en milisegundos (ms), en formato
 serializable (float), lista para ser usada desde gRPC o GUI.
 
 Uso:
@@ -11,9 +12,15 @@ Uso:
 
 Comando Make asociado:
     make test-inference  ->  Ejecuta los tests unitarios del modulo
+
+Unidades de tiempo:
+    Todos los tiempos se expresan en milisegundos (ms) como float
+    redondeado a 3 decimales. Se usa time.perf_counter() para maxima
+    precision en medicion de intervalos cortos.
 """
 
 import logging
+import time
 from typing import Union
 
 import torch
@@ -32,7 +39,7 @@ def run_inference(
 
     Preprocesa la imagen, ejecuta el modelo en modo evaluacion, calcula
     softmax sobre los logits y retorna la prediccion con sus probabilidades
-    por clase como floats serializables.
+    por clase y tiempos de ejecucion como floats serializables.
 
     Args:
         image: Imagen fuente. Puede ser:
@@ -51,6 +58,11 @@ def run_inference(
                 "scores": {             # dict - probabilidad por clase (float, suma ~1.0)
                     "AI": 0.9741,
                     "Real": 0.0259
+                },
+                "timing": {             # dict - tiempos de ejecucion en milisegundos (ms)
+                    "preprocessing_ms": 12.345,   # float - tiempo de preprocesamiento
+                    "inference_ms": 45.678,       # float - tiempo de inferencia del modelo
+                    "total_ms": 58.023            # float - suma de preprocessing + inference
                 }
             }
 
@@ -72,14 +84,19 @@ def run_inference(
         ... )
         >>> img = Image.open("photo.jpg")
         >>> result = run_inference(img, model, processor)
-        >>> print(result["label"])   # "AI" o "Real"
-        >>> print(result["scores"])  # {"AI": 0.97, "Real": 0.03}
+        >>> print(result["label"])                      # "AI" o "Real"
+        >>> print(result["scores"])                     # {"AI": 0.97, "Real": 0.03}
+        >>> print(result["timing"]["total_ms"])         # ej: 58.023
     """
-    # 1. Preprocesar imagen -> inputs dict con pixel_values
+    # 1. Preprocesar imagen -> inputs dict con pixel_values (con medicion de tiempo)
+    t0_preprocess = time.perf_counter()
     inputs = preprocess_image(image, processor)
+    t1_preprocess = time.perf_counter()
+    preprocessing_ms = round((t1_preprocess - t0_preprocess) * 1000, 3)
 
-    # 2. Inferencia en modo evaluacion sin gradientes
+    # 2. Inferencia en modo evaluacion sin gradientes (con medicion de tiempo)
     model.eval()
+    t0_inference = time.perf_counter()
     try:
         with torch.no_grad():
             outputs = model(**inputs)
@@ -87,6 +104,8 @@ def run_inference(
         raise RuntimeError(
             f"Error durante la inferencia del modelo: {exc}"
         ) from exc
+    t1_inference = time.perf_counter()
+    inference_ms = round((t1_inference - t0_inference) * 1000, 3)
 
     # 3. Validar que el modelo retorno logits
     if not hasattr(outputs, "logits"):
@@ -113,17 +132,29 @@ def run_inference(
 
     label = id2label[label_id]
 
+    # 7. Calcular total_ms como suma explicita de ambos tiempos
+    total_ms = round(preprocessing_ms + inference_ms, 3)
+
     result = {
         "label": label,
         "label_id": label_id,
         "scores": scores,
+        "timing": {
+            "preprocessing_ms": preprocessing_ms,
+            "inference_ms": inference_ms,
+            "total_ms": total_ms,
+        },
     }
 
     logger.debug(
-        "Inferencia exitosa. label=%s, label_id=%d, scores=%s",
+        "Inferencia exitosa. label=%s, label_id=%d, scores=%s, "
+        "preprocessing_ms=%.3f, inference_ms=%.3f, total_ms=%.3f",
         label,
         label_id,
         scores,
+        preprocessing_ms,
+        inference_ms,
+        total_ms,
     )
 
     return result

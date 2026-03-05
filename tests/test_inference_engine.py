@@ -54,7 +54,7 @@ def mock_model():
 
 
 # ---------------------------------------------------------------------------
-# Tests - Estructura del output
+# Tests - Estructura del output (existentes, sin cambios)
 # ---------------------------------------------------------------------------
 
 class TestRunInferenceOutput:
@@ -91,7 +91,7 @@ class TestRunInferenceOutput:
 
 
 # ---------------------------------------------------------------------------
-# Tests - Valores del output
+# Tests - Valores del output (existentes, sin cambios)
 # ---------------------------------------------------------------------------
 
 class TestRunInferenceLabel:
@@ -109,13 +109,11 @@ class TestRunInferenceLabel:
         assert result["label"] in result["scores"]
 
     def test_label_correcto_segun_logits(self, rgb_image, mock_model, mock_processor):
-        # logits=[2.0, 0.5] -> argmax=0 -> "AI"
         result = run_inference(rgb_image, mock_model, mock_processor)
         assert result["label"] == "AI"
         assert result["label_id"] == 0
 
     def test_label_real_cuando_logit_mayor(self, rgb_image, mock_processor):
-        # logits=[0.1, 3.0] -> argmax=1 -> "Real"
         model = MagicMock()
         model.return_value = SimpleNamespace(logits=torch.tensor([[0.1, 3.0]]))
         model.config.id2label = {0: "AI", 1: "Real"}
@@ -129,7 +127,7 @@ class TestRunInferenceLabel:
 
 
 # ---------------------------------------------------------------------------
-# Tests - Entrada bytes
+# Tests - Entrada bytes (existentes, sin cambios)
 # ---------------------------------------------------------------------------
 
 class TestRunInferenceDesdeBytes:
@@ -144,7 +142,7 @@ class TestRunInferenceDesdeBytes:
 
 
 # ---------------------------------------------------------------------------
-# Tests - Manejo de errores
+# Tests - Manejo de errores (existentes, sin cambios)
 # ---------------------------------------------------------------------------
 
 class TestRunInferenceErrores:
@@ -165,3 +163,74 @@ class TestRunInferenceErrores:
         bad_model.config.id2label = {0: "AI", 1: "Real"}
         with pytest.raises(ValueError, match="El modelo no retorno 'logits'"):
             run_inference(rgb_image, bad_model, mock_processor)
+
+
+# ---------------------------------------------------------------------------
+# Tests - Timing (NUEVOS - issue #11)
+# ---------------------------------------------------------------------------
+
+class TestRunInferenceTiming:
+
+    def test_tiene_clave_timing(self, rgb_image, mock_model, mock_processor):
+        # Arrange / Act
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        # Assert
+        assert "timing" in result
+
+    def test_timing_es_dict(self, rgb_image, mock_model, mock_processor):
+        # Arrange / Act
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        # Assert
+        assert isinstance(result["timing"], dict)
+
+    def test_timing_tiene_preprocessing_ms(self, rgb_image, mock_model, mock_processor):
+        # Arrange / Act
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        # Assert
+        assert "preprocessing_ms" in result["timing"]
+
+    def test_timing_tiene_inference_ms(self, rgb_image, mock_model, mock_processor):
+        # Arrange / Act
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        # Assert
+        assert "inference_ms" in result["timing"]
+
+    def test_timing_tiene_total_ms(self, rgb_image, mock_model, mock_processor):
+        # Arrange / Act
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        # Assert
+        assert "total_ms" in result["timing"]
+
+    def test_timing_valores_son_floats(self, rgb_image, mock_model, mock_processor):
+        # Arrange / Act
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        timing = result["timing"]
+        # Assert
+        assert isinstance(timing["preprocessing_ms"], float)
+        assert isinstance(timing["inference_ms"], float)
+        assert isinstance(timing["total_ms"], float)
+
+    def test_timing_valores_son_positivos(self, rgb_image, mock_model, mock_processor):
+        # Arrange / Act
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        timing = result["timing"]
+        # Assert
+        assert timing["preprocessing_ms"] >= 0.0
+        assert timing["inference_ms"] >= 0.0
+        assert timing["total_ms"] >= 0.0
+
+    def test_total_ms_es_suma_de_partes(self, rgb_image, mock_model, mock_processor):
+        # Arrange / Act
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        timing = result["timing"]
+        # Assert
+        expected = round(timing["preprocessing_ms"] + timing["inference_ms"], 3)
+        assert abs(timing["total_ms"] - expected) < 0.01
+
+    def test_timing_tiene_3_decimales(self, rgb_image, mock_model, mock_processor):
+        # Arrange / Act
+        result = run_inference(rgb_image, mock_model, mock_processor)
+        timing = result["timing"]
+        # Assert
+        for key, val in timing.items():
+            assert round(val, 3) == val, f"{key} tiene mas de 3 decimales: {val}"
