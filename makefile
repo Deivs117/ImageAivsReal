@@ -1,4 +1,4 @@
-.PHONY: help install clean clean-grpc grpc grpc-server test gui link_model healthcheck inference mlflow
+.PHONY: help install clean clean-grpc grpc grpc-server test test-preprocessing test-inference test-coverage gui link_model healthcheck inference mlflow
 
 # Detectar SO
 UNAME := $(shell uname)
@@ -19,17 +19,20 @@ endif
 
 help:
 	@echo "Comandos disponibles:"
-	@echo "  make install      - Instalar dependencias (uv sync)"
-	@echo "  make gui          - Ejecutar Streamlit GUI (app/app.py)"
-	@echo "  make grpc         - Generar stubs gRPC desde proto/inference.proto"
-	@echo "  make grpc-server  - Iniciar servidor gRPC de inferencia"
-	@echo "  make clean-grpc   - Limpiar stubs gRPC generados"
-	@echo "  make clean        - Limpiar todo (__pycache__, .pytest_cache, proto/generated)"
-	@echo "  make test         - Ejecutar tests con pytest"
-	@echo "  make inference    - Ejecutar script de inferencia"
-	@echo "  make mlflow       - Iniciar servidor de MLflow UI"
-	@echo "  make link_model   - Establecer HF_MODEL_ID y ejecutar health check"
-	@echo "  make healthcheck  - Ejecutar health check del modelo MLflow"
+	@echo "  make install            - Instalar dependencias (uv sync)"
+	@echo "  make gui                - Ejecutar Streamlit GUI (app/app.py)"
+	@echo "  make grpc               - Generar stubs gRPC desde proto/inference.proto"
+	@echo "  make grpc-server        - Iniciar servidor gRPC de inferencia"
+	@echo "  make clean-grpc         - Limpiar stubs gRPC generados"
+	@echo "  make clean              - Limpiar todo (__pycache__, .pytest_cache, proto/generated)"
+	@echo "  make test               - Ejecutar todos los tests con pytest"
+	@echo "  make test-preprocessing - Ejecutar solo tests del modulo de preprocesamiento"
+	@echo "  make test-inference     - Ejecutar solo tests del motor de inferencia"
+	@echo "  make test-coverage      - Ejecutar tests con reporte de cobertura HTML"
+	@echo "  make inference          - Ejecutar script de inferencia"
+	@echo "  make mlflow             - Iniciar servidor de MLflow UI"
+	@echo "  make link_model         - Establecer HF_MODEL_ID y ejecutar health check"
+	@echo "  make healthcheck        - Ejecutar health check del modelo MLflow"
 
 # ============================================
 # INSTALACIÓN Y DEPENDENCIAS
@@ -127,6 +130,10 @@ test:
 test-preprocessing:
 	@echo "Running preprocessing module tests..."
 	uv run -m pytest tests/test_preprocessing.py -v
+
+test-inference:
+	@echo "Running inference engine module tests..."
+	uv run -m pytest tests/test_inference_engine.py -v
 
 test-coverage:
 	@echo "Running tests with coverage..."
