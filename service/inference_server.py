@@ -1,24 +1,26 @@
-"""gRPC inference server with mock responses for testing."""
+"""gRPC inference server with real model inference."""
 import logging
 import os
-import random
 import sys
 from concurrent import futures
 
 import grpc
 from dotenv import load_dotenv
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-# Add proto/generated to path so gRPC stubs can be imported
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'proto', 'generated'))
 
 import inference_pb2
 import inference_pb2_grpc
+
+from service.inference.inference_engine import run_inference
 
 load_dotenv()
 
 LOG_LEVEL = os.getenv('GRPC_LOG_LEVEL', 'INFO')
 GRPC_SERVER_HOST = os.getenv('GRPC_SERVER_HOST', 'localhost')
 GRPC_SERVER_PORT = int(os.getenv('GRPC_SERVER_PORT', '50051'))
+HF_MODEL_ID = os.getenv('HF_MODEL_ID', 'Ateeqq/ai-vs-human-image-detector')
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
@@ -28,7 +30,13 @@ logger = logging.getLogger(__name__)
 
 
 class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
-    """Mock gRPC servicer that returns random classification results."""
+    """gRPC servicer that performs real model inference."""
+
+    def __init__(self):
+        logger.info('Loading model %s...', HF_MODEL_ID)
+        self.processor = AutoImageProcessor.from_pretrained(HF_MODEL_ID)
+        self.model = AutoModelForImageClassification.from_pretrained(HF_MODEL_ID)
+        logger.info('Model loaded successfully.')
 
     def ClassifyImage(self, request, context):
         logger.info(
@@ -37,30 +45,60 @@ class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
             request.filename,
         )
 
-        predicted_label = random.choice(['AI', 'human'])
-        confidence = round(random.uniform(0.70, 0.99), 4)
-        prob_ai = round(random.uniform(0.0, 1.0), 4)
-        prob_human = round(1.0 - prob_ai, 4)
+        try:
+            result = run_inference(request.image_data, self.model, self.processor)
+        except Exception as exc:
+            logger.error('Unexpected error during inference: %s', exc)
+            metrics = inference_pb2.PerformanceMetrics(
+                preprocess_time_ms=0,
+                inference_time_ms=0,
+                total_time_ms=0,
+            )
+            return inference_pb2.ClassificationResponse(
+                image_id=request.image_id,
+                status=inference_pb2.ERROR,
+                predicted_label='',
+                confidence=0.0,
+                prob_ai=0.0,
+                prob_human=0.0,
+                metrics=metrics,
+                error_message=str(exc),
+            )
 
-        preprocess_time_ms = random.randint(10, 50)
-        inference_time_ms = random.randint(100, 200)
-        total_time_ms = preprocess_time_ms + inference_time_ms
+        if result['status'] == 'ok':
+            scores = result['scores']
+            label = result['label']
+            timing = result['timing']
+            metrics = inference_pb2.PerformanceMetrics(
+                preprocess_time_ms=int(timing.get('preprocessing_ms', 0)),
+                inference_time_ms=int(timing.get('inference_ms', 0)),
+                total_time_ms=int(timing.get('total_ms', 0)),
+            )
+            return inference_pb2.ClassificationResponse(
+                image_id=request.image_id,
+                status=inference_pb2.OK,
+                predicted_label=label,
+                confidence=float(scores.get(label, 0.0)),
+                prob_ai=float(scores.get('ai', 0.0)),
+                prob_human=float(scores.get('human', 0.0)),
+                metrics=metrics,
+                error_message='',
+            )
 
         metrics = inference_pb2.PerformanceMetrics(
-            preprocess_time_ms=preprocess_time_ms,
-            inference_time_ms=inference_time_ms,
-            total_time_ms=total_time_ms,
+            preprocess_time_ms=0,
+            inference_time_ms=0,
+            total_time_ms=0,
         )
-
         return inference_pb2.ClassificationResponse(
             image_id=request.image_id,
-            status=inference_pb2.OK,
-            predicted_label=predicted_label,
-            confidence=confidence,
-            prob_ai=prob_ai,
-            prob_human=prob_human,
+            status=inference_pb2.ERROR,
+            predicted_label='',
+            confidence=0.0,
+            prob_ai=0.0,
+            prob_human=0.0,
             metrics=metrics,
-            error_message='',
+            error_message=result['error']['message'],
         )
 
 
