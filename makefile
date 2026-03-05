@@ -121,8 +121,12 @@ endif
 # ============================================
 
 test:
-	@echo "Running tests with pytest..."
+	@echo "Running all tests with pytest..."
 	uv run -m pytest tests/ -v
+
+test-preprocessing:
+	@echo "Running preprocessing module tests..."
+	uv run -m pytest tests/test_preprocessing.py -v
 
 test-coverage:
 	@echo "Running tests with coverage..."
