@@ -1,4 +1,4 @@
-.PHONY: help install clean clean-grpc grpc grpc-server test test-preprocessing test-inference test-coverage gui link_model healthcheck inference mlflow
+.PHONY: help install clean clean-grpc grpc proto-gen grpc-server test test-preprocessing test-inference test-coverage gui link_model healthcheck inference mlflow
 
 # Detectar SO
 UNAME := $(shell uname)
@@ -22,6 +22,7 @@ help:
 	@echo "  make install            - Instalar dependencias (uv sync)"
 	@echo "  make gui                - Ejecutar Streamlit GUI (app/app.py)"
 	@echo "  make grpc               - Generar stubs gRPC desde proto/inference.proto"
+	@echo "  make proto-gen          - Alias de 'make grpc' (genera stubs gRPC)"
 	@echo "  make grpc-server        - Iniciar servidor gRPC de inferencia"
 	@echo "  make clean-grpc         - Limpiar stubs gRPC generados"
 	@echo "  make clean              - Limpiar todo (__pycache__, .pytest_cache, proto/generated)"
@@ -63,6 +64,8 @@ endif
 	@echo "Generating gRPC stubs from proto/inference.proto..."
 	uv run -m grpc_tools.protoc -I proto --python_out=proto/generated --grpc_python_out=proto/generated proto/inference.proto
 	@echo "gRPC stubs generated successfully in proto/generated/"
+
+proto-gen: grpc
 
 grpc-server:
 	@echo "Starting gRPC inference server..."
