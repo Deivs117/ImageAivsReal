@@ -99,11 +99,50 @@ Para mantener el MVP simple y consistente, el contrato se define para devolver s
 
 ---
 
-### Manejo de errores (definición mínima)
+### Manejo de errores (estrategia implementada)
 
-* **Errores por imagen**: imagen corrupta, formato inválido, falla de decodificación → respuesta `status=ERROR` sin tumbar el servidor ni frenar el lote.
-* **Errores de servicio**: servidor no disponible o timeout → la GUI muestra mensaje claro y evita crash.
-* **Errores parciales**: el lote continúa; el CSV registra tanto éxitos como errores.
+#### Cliente gRPC (`app/clientGrpc.py`)
+
+El cliente distingue y mapea los códigos de estado gRPC a mensajes amigables:
+
+| Código gRPC          | Causa probable                          | Mensaje al usuario                                         |
+|----------------------|-----------------------------------------|------------------------------------------------------------|
+| `DEADLINE_EXCEEDED`  | Timeout de la llamada RPC               | Informa que se superó el timeout configurado               |
+| `UNAVAILABLE`        | Servidor caído o no iniciado            | Informa que el servicio no está disponible                 |
+| `INVALID_ARGUMENT`   | Payload de imagen corrupto o inválido   | Informa que el archivo no es JPG/PNG válido                |
+| `INTERNAL`           | Error interno inesperado en el servidor | Informa del error interno e indica revisar logs            |
+| `CANCELLED`          | Llamada cancelada por el cliente        | Informa que la llamada fue cancelada                       |
+| `RESOURCE_EXHAUSTED` | Servidor sin recursos                   | Informa que el servidor no tiene recursos suficientes      |
+| Otros códigos        | Cualquier otro error gRPC               | Mensaje genérico con el nombre del código                  |
+
+**Métodos disponibles:**
+
+* `classify_image(...)` — lanza `GRPCClientError` con mensaje amigable en caso de fallo.
+  Útil cuando el llamador quiere manejar la excepción explícitamente.
+* `classify_image_safe(...)` — **nunca lanza**; retorna un dict con `status="error"` y
+  `error_message` con el mensaje amigable.  Recomendado para bucles de lote en la GUI,
+  ya que un fallo en una imagen no aborta el procesamiento del resto.
+
+**Conexión inicial:**
+
+* Si el canal no está listo dentro del `timeout`, se lanza `GRPCClientError` con mensaje
+  que indica el timeout y el servidor.
+* `grpc.FutureTimeoutError` se captura explícitamente y se distingue de otros errores de
+  conexión.
+
+#### Servidor gRPC (`service/inference_server.py`)
+
+* Verifica `context.is_active()` al inicio de cada llamada; si la solicitud fue cancelada
+  por el cliente, responde con `CANCELLED` sin desperdiciar recursos.
+* Errores de imagen inválida (`INVALID_IMAGE`) generan código `INVALID_ARGUMENT`.
+* Cualquier excepción inesperada dentro del pipeline genera código `INTERNAL`.
+* El servidor **nunca colapsa** por una solicitud fallida; continúa atendiendo el resto.
+
+#### Errores parciales en el lote
+
+* El lote continúa aunque falle una imagen (gracias a `classify_image_safe`).
+* El CSV registra tanto resultados exitosos (`status=ok`) como errores (`status=error`),
+  incluyendo el mensaje de error por imagen.
 
 ---
 
@@ -112,20 +151,26 @@ Para mantener el MVP simple y consistente, el contrato se define para devolver s
 * `app/`
 
   * `app.py` (Streamlit)
-  * `grpc_client.py` (adapter)
-  * `csv_export.py` (consolidación y descarga)
+  * `clientGrpc.py` (adapter gRPC con manejo de errores y timeouts)
+  * `batch_upload.py` (gestión del lote de imágenes)
+  * `result_table.py` (consolidación y export CSV)
+  * `streamlit_app.py` (ejemplo de integración completa)
 * `service/`
 
-  * `server.py` (gRPC server)
-  * `inference_engine.py` (preprocess + predict + timing)
-  * `model_loader.py` (carga modelo/processor)
+  * `inference_server.py` (gRPC server con manejo de errores y status codes)
+  * `inference/inference_engine.py` (preprocess + predict + timing)
+  * `inference/model_loader.py` (carga modelo/processor)
 * `proto/`
 
   * `inference.proto`
   * `generated/` (stubs)
 * `tests/`
 
-  * pruebas smoke (1 imagen, lote, inválidas)
+  * `test_client_grpc.py` (cliente: conexión, clasificación, errores, classify_image_safe)
+  * `test_grpc_server.py` (servidor: inicio, respuestas, errores, status codes)
+  * `test_grpc_stubs.py` (stubs generados)
+  * `test_inference_engine.py` (motor de inferencia)
+  * `test_preprocessing.py` (preprocesamiento)
 * `docs/`
 
   * `arquitectura.md` (este documento)
@@ -137,3 +182,6 @@ Para mantener el MVP simple y consistente, el contrato se define para devolver s
 * **gRPC mínimo viable**: suficiente para comunicación obligatoria sin complejidad innecesaria.
 * **Inferencia en CPU**: coherente con alcance acotado; medición de tiempos permite evidenciar limitaciones.
 * **Respuesta estandarizada**: facilita tabla en GUI, CSV y pruebas automatizadas.
+* **Errores amigables**: `_grpc_error_message()` centraliza el mapeo código→texto para facilitar la GUI.
+* **`classify_image_safe`**: patrón "nunca lanza" para bucles de lote; evita que un fallo en una imagen
+  aborte todo el procesamiento.
