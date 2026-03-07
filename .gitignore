@@ -1,7 +1,35 @@
-﻿.venv/
+# Entorno virtual
+venv/
+env/
+ENV/
+.venv
+
+# Dependencias
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Proyecto específico
 proto/generated/
 
-__pycache__/
-*.pyc
-
+# uv - Python package manager
 uv.lock
+
+# Variables de entorno (permitir .env en desarrollo; ignorar variantes de producción)
+.env.production
+.env.local

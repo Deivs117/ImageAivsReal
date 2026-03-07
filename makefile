@@ -1,16 +1,140 @@
-gui:
-	@uv run -m streamlit run app/app.py
+.PHONY: help install clean clean-grpc grpc grpc-server test test-preprocessing test-inference test-coverage gui link_model healthcheck inference mlflow
 
-create_dirs:
-	@echo "Creating directories..."
-	mkdir service, proto, docs, data
-	@echo "Directories created successfully."
+# Detectar SO
+UNAME := $(shell uname)
+
+ifeq ($(OS),Windows_NT)
+    # Windows
+    RM_DIR := rmdir /s /q
+    MKDIR := mkdir
+else
+    # Linux / Mac
+    RM_DIR := rm -rf
+    MKDIR := mkdir -p
+endif
+
+# ============================================
+# TARGETS GENERALES
+# ============================================
+
+help:
+	@echo "Comandos disponibles:"
+	@echo "  make install            - Instalar dependencias (uv sync)"
+	@echo "  make gui                - Ejecutar Streamlit GUI (app/app.py)"
+	@echo "  make grpc               - Generar stubs gRPC desde proto/inference.proto"
+	@echo "  make grpc-server        - Iniciar servidor gRPC de inferencia"
+	@echo "  make clean-grpc         - Limpiar stubs gRPC generados"
+	@echo "  make clean              - Limpiar todo (__pycache__, .pytest_cache, proto/generated)"
+	@echo "  make test               - Ejecutar todos los tests con pytest"
+	@echo "  make test-preprocessing - Ejecutar solo tests del modulo de preprocesamiento"
+	@echo "  make test-inference     - Ejecutar solo tests del motor de inferencia"
+	@echo "  make test-coverage      - Ejecutar tests con reporte de cobertura HTML"
+	@echo "  make inference          - Ejecutar script de inferencia"
+	@echo "  make mlflow             - Iniciar servidor de MLflow UI"
+	@echo "  make link_model         - Establecer HF_MODEL_ID y ejecutar health check"
+	@echo "  make healthcheck        - Ejecutar health check del modelo MLflow"
+
+# ============================================
+# INSTALACIÓN Y DEPENDENCIAS
+# ============================================
+
+install:
+	@echo "Installing dependencies with uv..."
+	uv sync
+
+# ============================================
+# GUI (Streamlit)
+# ============================================
+
+gui:
+	uv run -m streamlit run app/app.py
+
+# ============================================
+# gRPC TARGETS (Multiplataforma)
+# ============================================
 
 grpc:
-	@echo "gRPC stubs generating..."
+	@echo "Creating proto/generated directory if it doesn't exist..."
+ifeq ($(OS),Windows_NT)
 	@if not exist proto\generated mkdir proto\generated
-	@uv run python -m grpc_tools.protoc -I proto --python_out=proto/generated --grpc_python_out=proto/generated proto/inference.proto
-	@echo "gRPC stubs generated in proto/generated/"
+else
+	@mkdir -p proto/generated
+endif
+	@echo "Generating gRPC stubs from proto/inference.proto..."
+	uv run -m grpc_tools.protoc -I proto --python_out=proto/generated --grpc_python_out=proto/generated proto/inference.proto
+	@echo "gRPC stubs generated successfully in proto/generated/"
+
+grpc-server:
+	@echo "Starting gRPC inference server..."
+	uv run service/inference_server.py
 
 clean-grpc:
-	@uv run python -c "import shutil; shutil.rmtree('proto/generated', ignore_errors=True)" && echo "gRPC stubs removed."
+	@echo "Removing gRPC generated stubs..."
+ifeq ($(OS),Windows_NT)
+	@if exist proto\generated $(RM_DIR) proto\generated
+	@echo "gRPC stubs removed."
+else
+	@$(RM_DIR) proto/generated
+	@echo "gRPC stubs removed."
+endif
+
+# ============================================
+# INFERENCE
+# ============================================
+
+link_model:
+ifeq ($(OS),Windows_NT)
+	@echo "Setting HF_MODEL_ID and running health check..."
+	@cmd /c "set HF_MODEL_ID=dima806/ai_vs_real_image_detection && uv run -m service.inference.mlflow_health_check"
+else
+	@echo "Setting HF_MODEL_ID and running health check..."
+	HF_MODEL_ID=dima806/ai_vs_real_image_detection uv run -m service.inference.mlflow_health_check
+endif
+
+inference:
+	@echo "Running inference script..."
+	uv run service/inference/inference_engine.py
+
+mlflow:
+	@echo "Running MLflow tracking server..."
+	mlflow ui --host 127.0.0.1 --port 5000
+
+healthcheck:
+	@echo "Running health check..."
+	uv run -m service.inference.mlflow_health_check
+
+# ============================================
+# LIMPIEZA
+# ============================================
+
+clean:
+	@echo "Cleaning Python cache files..."
+ifeq ($(OS),Windows_NT)
+	@if exist __pycache__ $(RM_DIR) __pycache__
+	@if exist .pytest_cache $(RM_DIR) .pytest_cache
+	@if exist proto\generated $(RM_DIR) proto\generated
+	@echo "Clean completed."
+else
+	@$(RM_DIR) __pycache__ .pytest_cache proto/generated 2>/dev/null || true
+	@echo "Clean completed."
+endif
+
+# ============================================
+# TESTS
+# ============================================
+
+test:
+	@echo "Running all tests with pytest..."
+	uv run -m pytest tests/ -v
+
+test-preprocessing:
+	@echo "Running preprocessing module tests..."
+	uv run -m pytest tests/test_preprocessing.py -v
+
+test-inference:
+	@echo "Running inference engine module tests..."
+	uv run -m pytest tests/test_inference_engine.py -v
+
+test-coverage:
+	@echo "Running tests with coverage..."
+	uv run -m pytest tests/ --cov --cov-report=html

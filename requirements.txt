@@ -23,3 +23,6 @@ pandas>=2.2.3
 grpcio>=1.78.1
 grpcio-tools>=1.78.1
 protobuf>=6.31.0
+
+# Configuración
+python-dotenv>=1.0.0
