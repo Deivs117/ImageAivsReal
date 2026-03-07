@@ -194,3 +194,41 @@ class TestClassifyImageError:
         grpc_stub.ClassifyImage(_make_request(image_data=b"bad-data"))
         response = grpc_stub.ClassifyImage(_make_request())
         assert response.status == inference_pb2.OK
+
+
+# ---------------------------------------------------------------------------
+# TestClassifyImageGrpcStatusCodes
+# ---------------------------------------------------------------------------
+
+class TestClassifyImageGrpcStatusCodes:
+    """Verify gRPC-level error handling: server stays alive after failures."""
+
+    def test_servidor_no_colapsa_tras_multiples_errores(self, grpc_stub):
+        """Multiple consecutive bad images must not crash the server."""
+        for _ in range(3):
+            response = grpc_stub.ClassifyImage(_make_request(image_data=b"bad"))
+            assert response.status == inference_pb2.ERROR
+        # Server must still respond to a valid request
+        response = grpc_stub.ClassifyImage(_make_request())
+        assert response.status == inference_pb2.OK
+
+    def test_imagen_invalida_retorna_error_message(self, grpc_stub):
+        """Invalid image must include a non-empty error_message in the response."""
+        response = grpc_stub.ClassifyImage(_make_request(image_data=b"not-an-image"))
+        assert response.error_message != ""
+
+    def test_imagen_invalida_no_lanza_excepcion_grpc(self, grpc_stub):
+        """Application-level image errors must NOT raise a gRPC RpcError.
+
+        Invalid images are handled at the application level (status=ERROR in the
+        response body) so that batch processing can continue uninterrupted.
+        """
+        try:
+            response = grpc_stub.ClassifyImage(_make_request(image_data=b"bad"))
+            # If no exception: the response must have status=ERROR
+            assert response.status == inference_pb2.ERROR
+        except grpc.RpcError as exc:
+            pytest.fail(
+                f"Unexpected gRPC RpcError for invalid image: {exc.code()} – "
+                "application-level errors should be encoded in the response body."
+            )

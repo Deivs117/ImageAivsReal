@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import grpc
 import pytest
 
-from app.clientGrpc import GRPCClient, GRPCClientError
+from app.clientGrpc import GRPCClient, GRPCClientError, _grpc_error_message
 
 
 # ---------------------------------------------------------------------------
@@ -294,4 +294,297 @@ class TestGRPCClientClassifyImage:
         # Assert: an image_id was generated
         sent_request = call_args[0][0]
         assert sent_request.image_id != ""
+        client.close()
+
+
+# ---------------------------------------------------------------------------
+# TestGRPCClientErrorMessages
+# ---------------------------------------------------------------------------
+
+def _make_rpc_error(code: grpc.StatusCode, details: str = "detail") -> grpc.RpcError:
+    """Create a real grpc.RpcError subclass instance with a specific status code."""
+
+    class _FakeRpcError(grpc.RpcError):
+        def code(self):
+            return code
+
+        def details(self):
+            return details
+
+    return _FakeRpcError()
+
+
+class TestGRPCClientErrorMessages:
+    """Tests for _grpc_error_message and status-code-specific error handling."""
+
+    def test_grpc_error_message_deadline_exceeded(self):
+        # Arrange
+        err = _make_rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED)
+        # Act
+        msg = _grpc_error_message(err)
+        # Assert: message mentions timeout
+        assert "timeout" in msg.lower() or "excedió" in msg.lower()
+
+    def test_grpc_error_message_unavailable(self):
+        # Arrange
+        err = _make_rpc_error(grpc.StatusCode.UNAVAILABLE)
+        # Act
+        msg = _grpc_error_message(err)
+        # Assert: message mentions server not available
+        assert "disponible" in msg.lower() or "unavailable" in msg.lower()
+
+    def test_grpc_error_message_invalid_argument(self):
+        # Arrange
+        err = _make_rpc_error(grpc.StatusCode.INVALID_ARGUMENT)
+        # Act
+        msg = _grpc_error_message(err)
+        # Assert: message mentions invalid payload/image
+        assert "inválido" in msg.lower() or "invalid" in msg.lower()
+
+    def test_grpc_error_message_internal(self):
+        # Arrange
+        err = _make_rpc_error(grpc.StatusCode.INTERNAL)
+        # Act
+        msg = _grpc_error_message(err)
+        # Assert: message mentions internal/server error
+        assert "interno" in msg.lower() or "internal" in msg.lower()
+
+    def test_grpc_error_message_unknown_code_includes_code_name(self):
+        # Arrange: use a status code without a predefined message
+        err = _make_rpc_error(grpc.StatusCode.NOT_FOUND, details="resource missing")
+        # Act
+        msg = _grpc_error_message(err)
+        # Assert: falls back to generic message with code name
+        assert "NOT_FOUND" in msg or "resource missing" in msg
+
+    def test_grpc_error_message_returns_string(self):
+        # Arrange
+        err = _make_rpc_error(grpc.StatusCode.CANCELLED)
+        # Act / Assert
+        assert isinstance(_grpc_error_message(err), str)
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
+    def test_classify_image_deadline_exceeded_mensaje_amigable(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        # Arrange: RPC raises DEADLINE_EXCEEDED
+        mock_ready.return_value.result.return_value = True
+        stub_instance = MagicMock()
+        stub_instance.ClassifyImage.side_effect = _make_rpc_error(
+            grpc.StatusCode.DEADLINE_EXCEEDED
+        )
+        mock_stub_cls.return_value = stub_instance
+        client = GRPCClient(host="localhost", port=50051, timeout=1)
+
+        # Act / Assert
+        with pytest.raises(GRPCClientError) as exc_info:
+            client.classify_image(b"fakebytes")
+        assert "timeout" in str(exc_info.value).lower() or "excedió" in str(exc_info.value).lower()
+        client.close()
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
+    def test_classify_image_unavailable_mensaje_amigable(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        # Arrange: RPC raises UNAVAILABLE
+        mock_ready.return_value.result.return_value = True
+        stub_instance = MagicMock()
+        stub_instance.ClassifyImage.side_effect = _make_rpc_error(
+            grpc.StatusCode.UNAVAILABLE
+        )
+        mock_stub_cls.return_value = stub_instance
+        client = GRPCClient(host="localhost", port=50051, timeout=1)
+
+        # Act / Assert
+        with pytest.raises(GRPCClientError) as exc_info:
+            client.classify_image(b"fakebytes")
+        assert "disponible" in str(exc_info.value).lower() or "unavailable" in str(exc_info.value).lower()
+        client.close()
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
+    def test_classify_image_invalid_argument_mensaje_amigable(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        # Arrange: RPC raises INVALID_ARGUMENT
+        mock_ready.return_value.result.return_value = True
+        stub_instance = MagicMock()
+        stub_instance.ClassifyImage.side_effect = _make_rpc_error(
+            grpc.StatusCode.INVALID_ARGUMENT
+        )
+        mock_stub_cls.return_value = stub_instance
+        client = GRPCClient(host="localhost", port=50051, timeout=1)
+
+        # Act / Assert
+        with pytest.raises(GRPCClientError) as exc_info:
+            client.classify_image(b"badbytes")
+        assert "inválido" in str(exc_info.value).lower() or "invalid" in str(exc_info.value).lower()
+        client.close()
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    def test_connect_future_timeout_lanza_grpc_client_error(
+        self, mock_ready, mock_channel
+    ):
+        # Arrange: channel_ready_future raises FutureTimeoutError
+        mock_ready.return_value.result.side_effect = grpc.FutureTimeoutError()
+
+        # Act / Assert
+        with pytest.raises(GRPCClientError) as exc_info:
+            GRPCClient(host="localhost", port=12345, timeout=0)
+        assert "timeout" in str(exc_info.value).lower()
+
+
+# ---------------------------------------------------------------------------
+# TestGRPCClientClassifyImageSafe
+# ---------------------------------------------------------------------------
+
+class TestGRPCClientClassifyImageSafe:
+    """Tests for the classify_image_safe convenience method."""
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
+    def test_safe_retorna_dict_en_exito(self, mock_stub_cls, mock_ready, mock_channel):
+        # Arrange
+        mock_ready.return_value.result.return_value = True
+        stub_instance = MagicMock()
+        stub_instance.ClassifyImage.return_value = _make_dummy_response(status_ok=True)
+        mock_stub_cls.return_value = stub_instance
+        client = GRPCClient(host="localhost", port=50051, timeout=1)
+
+        # Act
+        result = client.classify_image_safe(b"fakebytes", filename="test.jpg")
+
+        # Assert
+        assert isinstance(result, dict)
+        assert result["status"] == "ok"
+        client.close()
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
+    def test_safe_no_lanza_en_error_rpc(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        # Arrange: RPC raises UNAVAILABLE
+        mock_ready.return_value.result.return_value = True
+        stub_instance = MagicMock()
+        stub_instance.ClassifyImage.side_effect = _make_rpc_error(
+            grpc.StatusCode.UNAVAILABLE
+        )
+        mock_stub_cls.return_value = stub_instance
+        client = GRPCClient(host="localhost", port=50051, timeout=1)
+
+        # Act: must NOT raise
+        result = client.classify_image_safe(b"fakebytes")
+
+        # Assert
+        assert result["status"] == "error"
+        assert result["error_message"] is not None
+        client.close()
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
+    def test_safe_error_tiene_campos_esperados(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        # Arrange
+        mock_ready.return_value.result.return_value = True
+        stub_instance = MagicMock()
+        stub_instance.ClassifyImage.side_effect = grpc.RpcError()
+        mock_stub_cls.return_value = stub_instance
+        client = GRPCClient(host="localhost", port=50051, timeout=1)
+
+        # Act
+        result = client.classify_image_safe(b"fakebytes", image_id="img-safe")
+
+        # Assert: all schema keys must be present
+        expected_keys = (
+            "image_id",
+            "status",
+            "predicted_label",
+            "confidence",
+            "prob_ai",
+            "prob_real",
+            "preprocess_time_ms",
+            "inference_time_ms",
+            "error_message",
+        )
+        for key in expected_keys:
+            assert key in result, f"Missing key: {key}"
+        client.close()
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
+    def test_safe_imagen_id_preservado_en_error(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        # Arrange
+        mock_ready.return_value.result.return_value = True
+        stub_instance = MagicMock()
+        stub_instance.ClassifyImage.side_effect = grpc.RpcError()
+        mock_stub_cls.return_value = stub_instance
+        client = GRPCClient(host="localhost", port=50051, timeout=1)
+
+        # Act
+        result = client.classify_image_safe(b"fakebytes", image_id="img-preserve-me")
+
+        # Assert
+        assert result["image_id"] == "img-preserve-me"
+        client.close()
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
+    def test_safe_lote_continua_tras_imagen_invalida(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        # Arrange: first call raises, second call succeeds
+        mock_ready.return_value.result.return_value = True
+        stub_instance = MagicMock()
+        stub_instance.ClassifyImage.side_effect = [
+            _make_rpc_error(grpc.StatusCode.INVALID_ARGUMENT),
+            _make_dummy_response(status_ok=True),
+        ]
+        mock_stub_cls.return_value = stub_instance
+        client = GRPCClient(host="localhost", port=50051, timeout=1)
+
+        # Act: process two images; batch must not be aborted
+        result_bad = client.classify_image_safe(b"bad", filename="bad.jpg")
+        result_ok = client.classify_image_safe(b"good", filename="good.jpg")
+
+        # Assert
+        assert result_bad["status"] == "error"
+        assert result_ok["status"] == "ok"
+        client.close()
+
+    @patch("app.clientGrpc.grpc.insecure_channel")
+    @patch("app.clientGrpc.grpc.channel_ready_future")
+    @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
+    def test_safe_error_message_es_string(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        # Arrange
+        mock_ready.return_value.result.return_value = True
+        stub_instance = MagicMock()
+        stub_instance.ClassifyImage.side_effect = _make_rpc_error(
+            grpc.StatusCode.DEADLINE_EXCEEDED
+        )
+        mock_stub_cls.return_value = stub_instance
+        client = GRPCClient(host="localhost", port=50051, timeout=1)
+
+        # Act
+        result = client.classify_image_safe(b"fakebytes")
+
+        # Assert: error_message must be a non-empty string
+        assert isinstance(result["error_message"], str)
+        assert len(result["error_message"]) > 0
         client.close()

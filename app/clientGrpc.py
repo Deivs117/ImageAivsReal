@@ -3,6 +3,27 @@
 Reads connection settings from .env (GRPC_SERVER_HOST, GRPC_SERVER_PORT,
 GRPC_TIMEOUT) and allows overriding them via constructor parameters.
 
+Error handling strategy
+-----------------------
+* Connection errors (server unreachable, channel readiness timeout) raise
+  :class:`GRPCClientError` immediately from ``__init__`` so the caller knows
+  the client is unusable.
+* Per-RPC failures are mapped to friendly human-readable messages depending
+  on the gRPC status code:
+
+  - ``DEADLINE_EXCEEDED`` → timeout message
+  - ``UNAVAILABLE``       → server unreachable message
+  - ``INVALID_ARGUMENT``  → bad image payload message
+  - ``INTERNAL``          → unexpected server-side error
+  - other codes           → generic gRPC error message with code name
+
+* :meth:`classify_image` raises :class:`GRPCClientError` on failure so the
+  caller can handle it explicitly.
+* :meth:`classify_image_safe` never raises; instead it returns a result dict
+  with ``status="error"`` and ``error_message`` populated.  Use this method
+  in batch-processing loops to prevent a single failed image from aborting the
+  entire batch.
+
 Usage::
 
     from app.clientGrpc import GRPCClient, GRPCClientError
@@ -10,6 +31,11 @@ Usage::
     client = GRPCClient()
     result = client.classify_image(image_bytes, filename="photo.jpg")
     client.close()
+
+    # Safe variant for batch use (never raises):
+    result = client.classify_image_safe(image_bytes, filename="photo.jpg")
+    if result["status"] == "error":
+        print(result["error_message"])
 """
 from __future__ import annotations
 
@@ -40,6 +66,55 @@ except ImportError as _exc:
 load_dotenv()
 
 LOG = logging.getLogger(__name__)
+
+# Friendly messages per gRPC status code (used by _grpc_error_message).
+_GRPC_STATUS_MESSAGES: Dict[grpc.StatusCode, str] = {
+    grpc.StatusCode.DEADLINE_EXCEEDED: (
+        "La llamada excedió el timeout configurado. "
+        "El servidor puede estar sobrecargado o la red es lenta."
+    ),
+    grpc.StatusCode.UNAVAILABLE: (
+        "El servidor gRPC no está disponible. "
+        "Verifique que el servicio de inferencia esté activo."
+    ),
+    grpc.StatusCode.INVALID_ARGUMENT: (
+        "El payload de la imagen es inválido. "
+        "Asegúrese de que el archivo sea JPG o PNG y no esté corrupto."
+    ),
+    grpc.StatusCode.INTERNAL: (
+        "El servidor encontró un error interno inesperado. "
+        "Revise los logs del servicio de inferencia."
+    ),
+    grpc.StatusCode.CANCELLED: (
+        "La llamada gRPC fue cancelada antes de completarse."
+    ),
+    grpc.StatusCode.RESOURCE_EXHAUSTED: (
+        "El servidor no tiene recursos suficientes para procesar la solicitud."
+    ),
+}
+
+
+def _grpc_error_message(rpc_err: grpc.RpcError) -> str:
+    """Return a human-readable message for a :class:`grpc.RpcError`.
+
+    If the status code has a predefined friendly message it is returned;
+    otherwise a generic message with the code name is produced.
+    """
+    try:
+        code: grpc.StatusCode = rpc_err.code()  # type: ignore[attr-defined]
+    except Exception:
+        return f"Error gRPC desconocido: {rpc_err}"
+
+    friendly = _GRPC_STATUS_MESSAGES.get(code)
+    if friendly:
+        return friendly
+
+    try:
+        details = rpc_err.details()  # type: ignore[attr-defined]
+    except Exception:
+        details = str(rpc_err)
+
+    return f"Error gRPC [{code.name}]: {details}"
 
 
 class GRPCClientError(Exception):
@@ -84,9 +159,26 @@ class GRPCClient:
         target = f"{self.host}:{self.port}"
         try:
             self._channel = grpc.insecure_channel(target)
-            grpc.channel_ready_future(self._channel).result(timeout=self.timeout)
+            ready_future = grpc.channel_ready_future(self._channel)
+            ready_future.result(timeout=self.timeout)
             self._stub = inference_pb2_grpc.AiVsRealClassifierStub(self._channel)
             LOG.info("Connected to gRPC server at %s", target)
+        except grpc.FutureTimeoutError as exc:
+            LOG.error(
+                "Timeout waiting for gRPC channel to become ready at %s "
+                "(timeout=%ss)",
+                target,
+                self.timeout,
+            )
+            raise GRPCClientError(
+                f"Timeout conectando al servidor gRPC en {target} "
+                f"(timeout={self.timeout}s). Verifique que el servidor esté activo."
+            ) from exc
+        except grpc.RpcError as exc:
+            LOG.error("gRPC error connecting to %s: %s", target, exc)
+            raise GRPCClientError(
+                f"Error gRPC al conectar con {target}: {_grpc_error_message(exc)}"
+            ) from exc
         except Exception as exc:
             LOG.exception("Could not connect to gRPC server at %s", target)
             raise GRPCClientError(
@@ -146,7 +238,9 @@ class GRPCClient:
         Raises
         ------
         GRPCClientError
-            If the client is not connected or if the RPC call fails.
+            If the client is not connected or if the RPC call fails.  The
+            exception message is human-readable and suitable for display in
+            the GUI.
         """
         if self._stub is None:
             raise GRPCClientError("Client is not connected")
@@ -161,13 +255,72 @@ class GRPCClient:
             response = self._stub.ClassifyImage(request, timeout=self.timeout)
             return self._parse_response(response)
         except grpc.RpcError as rpc_err:
-            LOG.exception("gRPC RpcError: %s", rpc_err)
-            raise GRPCClientError(f"gRPC error: {rpc_err}") from rpc_err
+            friendly = _grpc_error_message(rpc_err)
+            LOG.error(
+                "gRPC RpcError classifying image_id=%s filename=%s: %s",
+                img_id,
+                filename,
+                friendly,
+            )
+            raise GRPCClientError(friendly) from rpc_err
         except GRPCClientError:
             raise
         except Exception as exc:
-            LOG.exception("Error sending image: %s", exc)
-            raise GRPCClientError(f"Error sending image: {exc}") from exc
+            LOG.exception("Unexpected error sending image image_id=%s: %s", img_id, exc)
+            raise GRPCClientError(f"Error inesperado al enviar imagen: {exc}") from exc
+
+    def classify_image_safe(
+        self,
+        image_bytes: bytes,
+        filename: Optional[str] = None,
+        image_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Send image bytes to the server without raising on failure.
+
+        This is the recommended method for batch-processing loops in the GUI:
+        a failure for one image produces a result dict with ``status="error"``
+        instead of aborting the entire batch.
+
+        Parameters
+        ----------
+        image_bytes:
+            Raw bytes of a JPG or PNG image.
+        filename:
+            Original filename (optional, informational).
+        image_id:
+            Unique identifier. A UUID is generated if omitted.
+
+        Returns
+        -------
+        dict with keys: ``image_id``, ``status``, ``predicted_label``,
+        ``confidence``, ``prob_ai``, ``prob_real``, ``preprocess_time_ms``,
+        ``inference_time_ms``, ``error_message``.
+
+        On error, ``status`` is ``"error"`` and ``error_message`` contains a
+        human-readable description suitable for display in the GUI.  All
+        numeric fields will be ``None``.
+        """
+        img_id = image_id or str(uuid.uuid4())
+        try:
+            return self.classify_image(image_bytes, filename=filename, image_id=img_id)
+        except GRPCClientError as err:
+            LOG.warning(
+                "classify_image_safe: error for image_id=%s filename=%s: %s",
+                img_id,
+                filename,
+                err,
+            )
+            return {
+                "image_id": img_id,
+                "status": "error",
+                "predicted_label": None,
+                "confidence": None,
+                "prob_ai": None,
+                "prob_real": None,
+                "preprocess_time_ms": None,
+                "inference_time_ms": None,
+                "error_message": str(err),
+            }
 
     def close(self) -> None:
         """Close the underlying gRPC channel and release resources."""

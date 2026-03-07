@@ -73,14 +73,49 @@ class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
             request.filename,
         )
 
-        result = run_inference(request.image_data, self.model, self.processor)
+        # Do not process requests that have already been cancelled by the client.
+        if not context.is_active():
+            logger.warning(
+                'Request cancelled before processing: image_id=%s',
+                request.image_id,
+            )
+            context.abort(
+                grpc.StatusCode.CANCELLED,
+                'Request was cancelled by the client before processing.',
+            )
+            return inference_pb2.ClassificationResponse()
+
+        try:
+            result = run_inference(request.image_data, self.model, self.processor)
+        except Exception as exc:
+            # Unexpected error inside the inference pipeline: report as INTERNAL.
+            # Use context.set_code so the client receives a gRPC-level error.
+            logger.exception(
+                'Unexpected error during inference for image_id=%s: %s',
+                request.image_id,
+                exc,
+            )
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f'Error interno inesperado: {exc}')
+            return inference_pb2.ClassificationResponse(
+                image_id=request.image_id,
+                status=inference_pb2.ERROR,
+                error_message=f'Error interno inesperado: {exc}',
+            )
 
         if result['status'] == 'error':
+            error_msg = result['error']['message']
+            error_code = result['error'].get('code', 'UNKNOWN')
             logger.warning(
-                'Inference error for image_id=%s: %s',
+                'Inference error for image_id=%s code=%s: %s',
                 request.image_id,
-                result['error']['message'],
+                error_code,
+                error_msg,
             )
+            # Application-level error (e.g. corrupt image): return an ERROR
+            # ClassificationResponse so the client can inspect the message.
+            # We do NOT set a gRPC error code here because the server responded
+            # successfully at the protocol level; only the image was invalid.
             return inference_pb2.ClassificationResponse(
                 image_id=request.image_id,
                 status=inference_pb2.ERROR,
@@ -93,7 +128,7 @@ class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
                     inference_time_ms=0,
                     total_time_ms=0,
                 ),
-                error_message=result['error']['message'],
+                error_message=error_msg,
             )
 
         # Map scores dict to proto fields - normalize label keys to lowercase
