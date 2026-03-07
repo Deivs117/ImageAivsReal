@@ -1,5 +1,5 @@
 """
-Modulo de inferencia central para el modelo dima806/ai_vs_real_image_detection.
+Modulo de inferencia central para el modelo Ateeqq/ai-vs-human-image-detector.
 
 Funcion reutilizable que ejecuta el modelo sobre una imagen y retorna
 la prediccion (clase ganadora), las probabilidades por clase, los tiempos

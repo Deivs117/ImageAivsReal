@@ -20,8 +20,6 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-HF_MODEL_ID = "dima806/ai_vs_real_image_detection"
-
 def preprocess_image(
     image: Union[Image.Image, bytes],
     processor,
@@ -29,7 +27,7 @@ def preprocess_image(
     """Preprocesa una imagen para ser usada como entrada al modelo ViT.
 
     Convierte una imagen PIL o bytes en un diccionario de tensores PyTorch
-    compatibles con el modelo dima806/ai_vs_real_image_detection.
+    compatibles con el modelo Ateeqq/ai-vs-human-image-detector.
 
     Args:
         image: Imagen fuente. Puede ser:
@@ -52,7 +50,7 @@ def preprocess_image(
         >>> from PIL import Image
         >>> from transformers import AutoImageProcessor
         >>> processor = AutoImageProcessor.from_pretrained(
-        ...     "dima806/ai_vs_real_image_detection"
+        ...     "Ateeqq/ai-vs-human-image-detector"
         ... )
         >>> img = Image.new("RGB", (224, 224))
         >>> inputs = preprocess_image(img, processor)

@@ -36,7 +36,7 @@ def init_inference_artifacts(
     Sin side-effects: NO se ejecuta al importar el módulo, solo al llamar esta función.
 
     Nota: Usamos AutoModelForImageClassification para que funcione con modelos ViT/otros
-    (por ejemplo dima806/ai_vs_real_image_detection es ViT).
+    (por ejemplo Ateeqq/ai-vs-human-image-detector es ViT).
     """
     if not hf_model_id or not hf_model_id.strip():
         raise ModelLoadError(
