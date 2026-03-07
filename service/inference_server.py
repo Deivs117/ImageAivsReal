@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'proto', 'gener
 import inference_pb2
 import inference_pb2_grpc
 
-from service.inference.inference_engine import run_inference
+from inference.inference_engine import run_inference
 
 load_dotenv()
 

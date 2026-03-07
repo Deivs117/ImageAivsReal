@@ -88,15 +88,15 @@ endif
 link_model:
 ifeq ($(OS),Windows_NT)
 	@echo "Setting HF_MODEL_ID and running health check..."
-	@cmd /c "set HF_MODEL_ID=dima806/ai_vs_real_image_detection && uv run -m service.inference.mlflow_health_check"
+	@cmd /c "set HF_MODEL_ID=Ateeqq/ai-vs-human-image-detector && uv run -m service.inference.mlflow_health_check"
 else
 	@echo "Setting HF_MODEL_ID and running health check..."
-	HF_MODEL_ID=dima806/ai_vs_real_image_detection uv run -m service.inference.mlflow_health_check
+	HF_MODEL_ID=Ateeqq/ai-vs-human-image-detector uv run -m service.inference.mlflow_health_check
 endif
 
 inference:
 	@echo "Running inference script..."
-	uv run service/inference/inference_engine.py
+	uv run service/inference_server.py
 
 mlflow:
 	@echo "Running MLflow tracking server..."
