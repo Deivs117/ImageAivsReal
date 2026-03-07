@@ -114,6 +114,9 @@ clean:
 	@echo "Cleaning Python cache files..."
 ifeq ($(OS),Windows_NT)
 	@if exist __pycache__ $(RM_DIR) __pycache__
+	@if exist service\__pycache__ $(RM_DIR) service\__pycache__
+	@if exist app\__pycache__ $(RM_DIR) app\__pycache__
+	@if exist tests\__pycache__ $(RM_DIR) tests\__pycache__
 	@if exist .pytest_cache $(RM_DIR) .pytest_cache
 	@if exist proto\generated $(RM_DIR) proto\generated
 	@echo "Clean completed."
