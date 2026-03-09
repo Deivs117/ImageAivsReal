@@ -14,6 +14,7 @@ dependencies = [
     # --- Procesamiento de imágenes y datos ---
     "Pillow>=11.2.1",
     "pandas>=2.2.3",
+    "reportlab>=4.2.0",
     # --- gRPC (comunicación cliente-servidor) ---
     "grpcio>=1.78.0",
     "grpcio-tools>=1.78.0,<1.79",

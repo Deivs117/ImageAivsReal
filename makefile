@@ -48,7 +48,7 @@ install:
 # ============================================
 
 gui:
-	uv run -m streamlit run app/app.py
+	uv run -m streamlit run app/streamlit_app.py
 
 # ============================================
 # gRPC TARGETS (Multiplataforma)
