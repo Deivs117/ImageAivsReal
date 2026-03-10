@@ -35,7 +35,7 @@ from inference.inference_engine import run_inference
 load_dotenv()
 
 LOG_LEVEL = os.getenv('GRPC_LOG_LEVEL', 'INFO')
-GRPC_SERVER_HOST = os.getenv('GRPC_SERVER_HOST', 'localhost')
+GRPC_SERVER_HOST = os.getenv('GRPC_SERVER_HOST', '0.0.0.0')
 GRPC_SERVER_PORT = int(os.getenv('GRPC_SERVER_PORT', '50051'))
 HF_MODEL_ID = os.getenv('HF_MODEL_ID', 'Ateeqq/ai-vs-human-image-detector')
 

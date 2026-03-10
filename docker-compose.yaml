@@ -1,0 +1,15 @@
+version: "3.8"
+services:
+  inference-service:
+    build:
+      context: .
+      dockerfile: service/Dockerfile
+    image: imageaivsreal/service:local
+    env_file:
+      - .env
+    ports:
+      - "50051:50051"
+    # Durante DEPLOY: NO montar el volumen ./service -> /app/service
+    # volumes:
+    #   - ./service:/app/service
+    command: ["python", "-u", "service/inference_server.py"]

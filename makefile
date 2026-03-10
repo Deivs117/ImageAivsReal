@@ -148,3 +148,23 @@ test-inference:
 test-coverage:
 	@echo "Running tests with coverage..."
 	uv run -m pytest tests/ --cov --cov-report=html
+
+# ============================================
+# DOCKER
+# ============================================
+
+# Targets para build y push de Docker image
+IMAGE_NAME := davids117/image-classifier:latest
+
+dcupbuild:
+	docker-compose up --build
+
+build-image:
+	docker build -t $(IMAGE_NAME) -f /Dockerfile .
+
+local-run:
+	docker run --rm -p 50051:50051 --env-file .env $(IMAGE_NAME)
+
+# Push a Docker Hub (o taggear para ACR)
+push-image:
+	docker push $(IMAGE_NAME)
