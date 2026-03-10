@@ -3,7 +3,7 @@ name = "imageaivsreal"
 version = "0.1.0"
 description = "Aplicación web en Streamlit para clasificar imágenes como generadas por IA o reales."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = [
     # --- Interfaz web ---
     "streamlit>=1.45.0",
@@ -23,7 +23,8 @@ dependencies = [
 
     # --- Configuración ---
     "python-dotenv>=1.0.0",
-]
+    "torch @ https://download.pytorch.org/whl/cpu/torch-2.10.0%2Bcpu-cp311-cp311-manylinux_2_28_x86_64.whl; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.11'",
+    ]
 
 [dependency-groups]
 dev = [

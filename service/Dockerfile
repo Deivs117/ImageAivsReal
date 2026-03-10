@@ -1,84 +1,65 @@
-# Dockerfile multi-stage para el servidor de inferencia (service/)
-# - Build stage: instala dependencias, compila stubs desde proto/
-# - Runtime stage: imagen más ligera que contiene solo el código y paquetes instalados
+FROM python:3.11-slim AS build
 
-### STAGE: build
-FROM python:3.12-slim AS build
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=off PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # Forzar índice CPU de PyTorch para evitar dependencias CUDA (opcional, uv.lock ya debe estar pinneado)
+    PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu/ \
+    VENV_PATH=/opt/venv
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=off \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
-
-# Instalar dependencias del sistema necesarias para compilación y ejecución
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    protobuf-compiler \
-    curl \
-    git \
+    build-essential gcc protobuf-compiler curl git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 
-# Copiar pyproject y .env (opcionalmente)
-COPY pyproject.toml ./
-COPY .env ./
+# Copiar pyproject/lock (se resuelven las dependencias con uv)
+COPY pyproject.toml uv.lock ./
 
-# Instalar pip y herramientas necesarias
-RUN python -m pip install --upgrade pip setuptools
+# Si tienes un .env que quieras empaquetar en la imagen build-stage (opcional)
+COPY .env .env
 
-# Instalar dependencias principales en el build stage.
-# NOTA: torch puede producir instalación pesada; si prefieres usar la rueda oficial
-# de PyTorch o una imagen base distinta, cámbialo aquí.
-RUN python -m pip install \
-    "streamlit>=1.45.0" \
-    "transformers>=4.52.0" \
-    "torch>=2.7.0" \
-    "accelerate>=1.7.0" \
-    "Pillow>=11.2.1" \
-    "pandas>=2.2.3" \
-    "reportlab>=4.2.0" \
-    "grpcio>=1.78.0" \
-    "grpcio-tools>=1.78.0,<1.79" \
-    "protobuf>=6.31.1,<7.0" \
-    "mlflow>=3.10.0" \
-    "python-dotenv>=1.0.0"
+RUN python -m pip install --upgrade pip setuptools wheel
+RUN python -m pip install uv \
+    && uv sync
 
-# Copiar el código de la aplicación y los proto files
+# Si uv crea .venv en la raíz del proyecto, lo movemos al path final (/opt/venv).
+# Nos aseguramos de crear el directorio padre y usamos mv -T para evitar ambigüedades.
+RUN if [ -d ".venv" ]; then mkdir -p "$(dirname ${VENV_PATH})" && mv -T .venv "${VENV_PATH}"; fi
+
+# Copiar código fuente y .proto
 COPY service/ /src/service/
 COPY proto/ /src/proto/
 
-# Generar stubs gRPC desde proto/ (si existen .proto)
+# Si necesitas generar stubs con protoc:
 RUN if [ -d "./proto" ] && [ "$(ls -A proto 2>/dev/null)" != "" ]; then \
-      python -m grpc_tools.protoc -I ./proto --python_out=./service --grpc_python_out=./service proto/*.proto || true ; \
+      "${VENV_PATH}/bin/python" -m grpc_tools.protoc -I ./proto --python_out=./service --grpc_python_out=./service proto/*.proto || true ; \
     fi
 
-# Opcional: ejecutar tests o limpiezas aquí (omitido)
+# --- Stage runtime ---
+FROM python:3.11-slim AS runtime
 
-### STAGE: runtime
-FROM python:3.12-slim AS runtime
+ENV PYTHONUNBUFFERED=1 \
+    VENV_PATH=/opt/venv \
+    PATH=/opt/venv/bin:$PATH \
+    WORKON_HOME=/opt/venv
 
-ENV PYTHONUNBUFFERED=1
-
-# Dependencias de sistema necesarias en runtime
+# Instalar paquetes mínimos de sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copiar paquetes instalados desde build (sitio de paquetes)
-# Si la ruta cambia en futuras versiones de python, ajusta la ruta.
-COPY --from=build /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
+# Copiar la virtualenv preparada (si existe)
+COPY --from=build /opt/venv /opt/venv
 
-# Copiar código de aplicación (incluye stubs generados en build)
+# Copiar código de la app (incluye stubs generados)
 COPY --from=build /src/service /app/service
-COPY --from=build /src/.env /app/.env 
+# Copiamos .env si lo quieres empaquetar; si lo cargas por docker-compose env_file, puedes omitirlo
+COPY --from=build /src/.env /app/.env
 
-# Exponer puerto gRPC (ajusta si usas otro)
+# Exponer puerto gRPC por defecto (ajusta si usas otro)
 EXPOSE 50051
 
-# Comando por defecto: ejecutar el servidor de inferencia
-# Ajusta esto si el entrypoint en tu repo es otro (ej.: python -m service.inference_server)
-CMD ["python", "-u", "service/inference_server.py"]
+# Usar el Python del virtualenv por defecto; -u para salida sin buffering
+CMD ["/opt/venv/bin/python", "-u", "service/inference_server.py"]

@@ -7,9 +7,11 @@ services:
     image: imageaivsreal/service:local
     env_file:
       - .env
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - HUGGINGFACE_HUB_TOKEN=${HF_TOKEN}
     ports:
       - "50051:50051"
-    # Durante DEPLOY: NO montar el volumen ./service -> /app/service
     # volumes:
-    #   - ./service:/app/service
-    command: ["python", "-u", "service/inference_server.py"]
+    #   - ./hf_cache:/root/.cache/huggingface   
+    command: ["/opt/venv/bin/python", "-u", "service/inference_server.py"]
