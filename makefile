@@ -34,6 +34,8 @@ help:
 	@echo "  make mlflow             - Iniciar servidor de MLflow UI"
 	@echo "  make link_model         - Establecer HF_MODEL_ID y ejecutar health check"
 	@echo "  make healthcheck        - Ejecutar health check del modelo MLflow"
+	@echo "  make app                - Ejecutar Streamlit GUI (app/streamlit_app.py)"
+
 
 # ============================================
 # INSTALACIÓN Y DEPENDENCIAS
@@ -49,6 +51,8 @@ install:
 
 gui:
 	uv run -m streamlit run app/streamlit_app.py
+
+app: gui
 
 # ============================================
 # gRPC TARGETS (Multiplataforma)
