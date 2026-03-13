@@ -7,6 +7,20 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 
+LABEL_ALIASES = {
+    "ai": "ai",
+    "ia": "ai",
+    "artificial": "ai",
+    "fake": "ai",
+    "generated": "ai",
+    "real": "real",
+    "hum": "real",
+    "human": "real",
+    "humana": "real",
+    "humano": "real",
+}
+
+
 SCHEMA_COLUMNS = [
     "timestamp",
     "filename",
@@ -19,6 +33,19 @@ SCHEMA_COLUMNS = [
     "error_message",
 ]
 
+
+
+
+def normalize_prediction_label(label: Any) -> Any:
+    """Normaliza aliases del modelo/UI a las etiquetas canonicas: ai | real."""
+    if label is None or (isinstance(label, float) and pd.isna(label)):
+        return None
+
+    normalized = str(label).strip().casefold()
+    if not normalized:
+        return None
+
+    return LABEL_ALIASES.get(normalized, normalized)
 
 def utc_now_iso() -> str:
     # ISO 8601 en UTC sin microsegundos: 2026-03-02T05:12:10Z
@@ -46,7 +73,7 @@ class ResultsTableBuilder:
             timestamp = d.get("timestamp") or utc_now_iso()
 
             # Campos de predicción (pueden estar None si aún no hay inferencia)
-            predicted_label = d.get("predicted_label")
+            predicted_label = normalize_prediction_label(d.get("predicted_label"))
             prob_ai = d.get("prob_ai")
             prob_real = d.get("prob_real")
             preprocess_time_ms = d.get("preprocess_time_ms")
