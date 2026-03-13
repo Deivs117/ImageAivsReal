@@ -134,7 +134,10 @@ class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
         # Map scores dict to proto fields - normalize label keys to lowercase
         scores = {k.lower(): v for k, v in result['scores'].items()}
         prob_ai = float(scores.get('ai', 0.0))
-        prob_human = float(scores.get('human', 0.0))
+        # The model may return 'human' or the shorter alias 'hum' for the
+        # real/human class; check both keys to get the correct probability.
+        prob_human_val = scores.get('human') if 'human' in scores else scores.get('hum', 0.0)
+        prob_human = float(prob_human_val)
 
         # Confidence = score of winning class
         predicted_label = result['label'].lower()
@@ -180,7 +183,15 @@ def serve(host=None, port=None, model=None, processor=None):
 
     servicer = AiVsRealClassifierServicer(model=model, processor=processor)
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    # 50 MB limit to handle large image payloads without RESOURCE_EXHAUSTED.
+    _MAX_MSG_BYTES = 50 * 1024 * 1024
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=10),
+        options=[
+            ("grpc.max_send_message_length", _MAX_MSG_BYTES),
+            ("grpc.max_receive_message_length", _MAX_MSG_BYTES),
+        ],
+    )
     inference_pb2_grpc.add_AiVsRealClassifierServicer_to_server(servicer, server)
     address = f'{host}:{port}'
     server.add_insecure_port(address)

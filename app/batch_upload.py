@@ -103,14 +103,20 @@ class BatchUploader:
     """
     Componente POO de UI: muestra el widget de carga y prepara el lote.
     """
+    # Session state key that holds the counter used to reset the file uploader.
+    _UPLOADER_COUNTER_KEY = "uploader_counter"
+
     def __init__(self, store: BatchStore) -> None:
         self.store = store
+        if self._UPLOADER_COUNTER_KEY not in st.session_state:
+            st.session_state[self._UPLOADER_COUNTER_KEY] = 0
 
     def render(self) -> None:
         uploaded_files = st.file_uploader(
             "Sube una o varias imágenes (JPG/JPEG/PNG)",
             type=["jpg", "jpeg", "png"],
             accept_multiple_files=True,
+            key=f"file_uploader_{st.session_state[self._UPLOADER_COUNTER_KEY]}",
         )
 
         # Validación básica de "existencia/carga"
@@ -124,6 +130,8 @@ class BatchUploader:
         with col2:
             if st.button("Limpiar lote", use_container_width=True):
                 self.store.clear()
+                # Increment the counter so the file_uploader widget resets
+                st.session_state[self._UPLOADER_COUNTER_KEY] += 1
                 st.rerun()
 
         # Lista simple del lote (nombre + estado inicial)

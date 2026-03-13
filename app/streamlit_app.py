@@ -64,6 +64,9 @@ if items:
             summary = runner.run()
             st.session_state[ANALYSIS_SUMMARY_KEY] = summary
             st.session_state[RESULTS_DF_KEY] = builder.from_batch_items(store.items())
+            # Trigger a clean rerun so render_batch_panel is only called once
+            # (avoids duplicate panel from the placeholder inside runner.run()).
+            st.rerun()
 
         render_batch_panel(store.items())
 
