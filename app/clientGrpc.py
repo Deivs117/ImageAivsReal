@@ -155,10 +155,21 @@ class GRPCClient:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    # Maximum message size accepted/sent by the channel (50 MB).
+    # The default gRPC limit is 4 MB which causes RESOURCE_EXHAUSTED for
+    # large image payloads.
+    _MAX_MSG_BYTES = 50 * 1024 * 1024
+
     def _connect(self) -> None:
         target = f"{self.host}:{self.port}"
         try:
-            self._channel = grpc.insecure_channel(target)
+            self._channel = grpc.insecure_channel(
+                target,
+                options=[
+                    ("grpc.max_send_message_length", self._MAX_MSG_BYTES),
+                    ("grpc.max_receive_message_length", self._MAX_MSG_BYTES),
+                ],
+            )
             ready_future = grpc.channel_ready_future(self._channel)
             ready_future.result(timeout=self.timeout)
             self._stub = inference_pb2_grpc.AiVsRealClassifierStub(self._channel)
