@@ -1,3 +1,12 @@
+"""Módulo de carga de modelos para el servicio de inferencia.
+
+Proporciona funciones para inicializar los artefactos de inferencia
+(modelo y procesador) desde Hugging Face y reportar el estado de
+carga a MLflow.
+
+Sin efectos secundarios al importarse: toda la lógica se ejecuta
+únicamente cuando se llaman las funciones explícitamente.
+"""
 from __future__ import annotations
 
 import logging
@@ -12,7 +21,10 @@ class ModelLoadError(RuntimeError):
 
 
 def _wrap(msg: str, exc: Exception) -> ModelLoadError:
-    raise ModelLoadError(f"{msg} | cause={type(exc).__name__}: {exc}") from exc
+    raise ModelLoadError(
+        f"{msg} | cause={type(exc).__name__}: {exc}"
+    ) from exc
+
 
 @dataclass(frozen=True)
 class InferenceArtifacts:
@@ -31,23 +43,33 @@ def init_inference_artifacts(
     hf_revision: Optional[str] = None,
     hf_token: Optional[str] = None,
 ) -> InferenceArtifacts:
-    """
-    Carga modelo + processor en CPU y modo eval.
-    Sin side-effects: NO se ejecuta al importar el módulo, solo al llamar esta función.
+    """Carga modelo + processor en CPU y modo eval.
 
-    Nota: Usamos AutoModelForImageClassification para que funcione con modelos ViT/otros
-    (por ejemplo Ateeqq/ai-vs-human-image-detector es ViT).
+    Sin side-effects: NO se ejecuta al importar el módulo,
+    solo al llamar esta función.
+
+    Nota: Usamos AutoModelForImageClassification para que funcione
+    con modelos ViT/otros (por ejemplo
+    Ateeqq/ai-vs-human-image-detector es ViT).
     """
     if not hf_model_id or not hf_model_id.strip():
         raise ModelLoadError(
-            "hf_model_id está vacío. Define HF_MODEL_ID (variable de entorno) o pásalo al llamar."
+            "hf_model_id está vacío. Define HF_MODEL_ID "
+            "(variable de entorno) o pásalo al llamar."
         )
 
     try:
         import torch
-        from transformers import AutoImageProcessor, AutoModelForImageClassification
+        from transformers import (
+            AutoImageProcessor,
+            AutoModelForImageClassification,
+        )
     except Exception as e:
-        raise _wrap("Faltan dependencias (torch/transformers). Revisa tu entorno.", e)
+        raise _wrap(
+            "Faltan dependencias (torch/transformers). "
+            "Revisa tu entorno.",
+            e,
+        )
 
     kwargs: Dict[str, Any] = {}
     if hf_cache_dir:
@@ -59,23 +81,32 @@ def init_inference_artifacts(
         kwargs["token"] = hf_token
 
     try:
-        processor = AutoImageProcessor.from_pretrained(hf_model_id, **kwargs)
-        model = AutoModelForImageClassification.from_pretrained(hf_model_id, **kwargs)
+        processor = AutoImageProcessor.from_pretrained(
+            hf_model_id, **kwargs
+        )
+        model = AutoModelForImageClassification.from_pretrained(
+            hf_model_id, **kwargs
+        )
     except OSError as e:
         raise _wrap(
             f"Fallo al cargar desde Hugging Face '{hf_model_id}'. "
-            "Verifica: internet, nombre del modelo, permisos/token, o cache.",
+            "Verifica: internet, nombre del modelo, permisos/token, "
+            "o cache.",
             e,
         )
     except Exception as e:
-        raise _wrap(f"Fallo inesperado cargando desde HF '{hf_model_id}'.", e)
+        raise _wrap(
+            f"Fallo inesperado cargando desde HF '{hf_model_id}'.", e
+        )
 
     try:
         model.to(device)  # cpu por defecto
         model.eval()      # criterio de aceptación
         torch.set_grad_enabled(False)
     except Exception as e:
-        raise _wrap("El modelo cargó, pero falló al mover a CPU o poner eval().", e)
+        raise _wrap(
+            "El modelo cargó, pero falló al mover a CPU o eval().", e
+        )
 
     return InferenceArtifacts(
         model=model,
@@ -87,8 +118,8 @@ def init_inference_artifacts(
 
 
 def report_loaded_to_mlflow(*, artifacts: InferenceArtifacts) -> None:
-    """
-    Registra tags para que en el UI de MLflow se vea que el servicio cargó el modelo.
+    """Registra tags en MLflow indicando que el servicio cargó el modelo.
+
     No se llama solo (sin side-effects).
     """
     try:
@@ -100,7 +131,9 @@ def report_loaded_to_mlflow(*, artifacts: InferenceArtifacts) -> None:
     try:
         mlflow.set_tag("service.inference_loaded", "true")
         mlflow.set_tag("service.model_source", artifacts.source)
-        mlflow.set_tag("service.model_id_or_uri", artifacts.model_id_or_uri)
+        mlflow.set_tag(
+            "service.model_id_or_uri", artifacts.model_id_or_uri
+        )
         mlflow.set_tag("service.device", artifacts.device)
     except Exception as e:
         logger.warning("No se pudo reportar a MLflow: %s", e)

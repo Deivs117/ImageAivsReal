@@ -53,7 +53,12 @@ _EMPTY_TIMING = {
     "total_ms": 0.0,
 }
 
-def _error_response(code: str, message: str, preprocessing_ms: float = 0.0) -> dict:
+
+def _error_response(
+    code: str,
+    message: str,
+    preprocessing_ms: float = 0.0,
+) -> dict:
     """Construye una respuesta de error estandarizada y serializable."""
     timing = {
         "preprocessing_ms": preprocessing_ms,
@@ -96,8 +101,9 @@ def run_inference(
         image: Imagen fuente. Puede ser:
             - PIL.Image.Image: usada directamente.
             - bytes: decodificada internamente antes del preprocesamiento.
-        model: Modelo de Hugging Face ya cargado (AutoModelForImageClassification
-            o compatible). Debe tener model.config.id2label.
+        model: Modelo de Hugging Face ya cargado
+            (AutoModelForImageClassification o compatible).
+            Debe tener model.config.id2label.
         processor: Instancia de AutoImageProcessor (o compatible) ya cargada.
 
     Returns:
@@ -136,7 +142,10 @@ def run_inference(
 
     Example:
         >>> from PIL import Image
-        >>> from transformers import AutoImageProcessor, AutoModelForImageClassification
+        >>> from transformers import (
+        ...     AutoImageProcessor,
+        ...     AutoModelForImageClassification,
+        ... )
         >>> processor = AutoImageProcessor.from_pretrained(
         ...     "dima806/ai_vs_real_image_detection"
         ... )
@@ -153,7 +162,8 @@ def run_inference(
     """
     preprocessing_ms = 0.0
 
-    # 1. Preprocesar imagen -> inputs dict con pixel_values (con medicion de tiempo)
+    # 1. Preprocesar imagen -> inputs dict con pixel_values
+    # (con medicion de tiempo)
     try:
         t0_preprocess = time.perf_counter()
         inputs = preprocess_image(image, processor)
