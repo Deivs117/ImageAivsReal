@@ -69,8 +69,6 @@ if items:
             st.session_state[RESULTS_DF_KEY] = (
                 builder.from_batch_items(store.items())
             )
-            # Trigger a clean rerun so render_batch_panel is called once
-            # (avoids duplicate panel from placeholder inside runner.run)
             st.rerun()
 
         render_batch_panel(store.items())
