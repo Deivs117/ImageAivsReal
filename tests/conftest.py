@@ -1,34 +1,47 @@
+"""Configuration module for pytest.
+
+Adds the parent of the 'inference' package to sys.path so that tests
+can import inference modules without requiring an installed package.
+"""
 import sys
 import os
 
-def add_inference_parent_to_sys_path():
-    """
-    Añade a sys.path la carpeta que contiene el paquete 'inference'.
-    1) Comprueba la ruta común <repo_root>/service/inference (la que tú indicastes).
-    2) Si no existe, busca recursivamente una carpeta llamada 'inference' y añade su padre.
-    3) Como último recurso añade la raíz del repo.
-    Esto permite que `import inference...` funcione durante la recolección de pytest.
-    """
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-    # Ruta preferida: <repo_root>/service/inference
+def add_inference_parent_to_sys_path():
+    """Add the parent of the 'inference' package to sys.path.
+
+    1) Checks the common path <repo_root>/service/inference.
+    2) If not found, searches recursively for 'inference' folder
+       and adds its parent.
+    3) As a last resort, adds the repo root.
+
+    This allows ``import inference...`` to work during pytest
+    collection.
+    """
+    repo_root = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..")
+    )
+
+    # Preferred path: <repo_root>/service/inference
     service_parent = os.path.join(repo_root, "service")
     if os.path.isdir(os.path.join(service_parent, "inference")):
         if service_parent not in sys.path:
             sys.path.insert(0, service_parent)
         return
 
-    # Búsqueda recursiva: si hay cualquier carpeta 'inference', añade su padre
+    # Recursive search: if any 'inference' folder exists, add its parent
     for dirpath, dirnames, _ in os.walk(repo_root):
         if "inference" in dirnames:
-            parent = dirpath  # dirpath contiene la carpeta 'inference'
+            # dirpath is the parent that contains 'inference'
+            parent = dirpath
             if parent not in sys.path:
                 sys.path.insert(0, parent)
             return
 
-    # Último recurso: añadir la raíz del repo
+    # Last resort: add the repo root
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
 
-# Ejecutar al importar conftest.py (pytest lo carga antes de la recolección)
+
+# Run when conftest.py is imported (pytest loads this before collection)
 add_inference_parent_to_sys_path()
