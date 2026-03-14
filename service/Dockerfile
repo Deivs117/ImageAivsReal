@@ -16,8 +16,13 @@ COPY pyproject.toml uv.lock ./
 COPY .env .env
 
 RUN python -m pip install --upgrade pip setuptools wheel
-RUN python -m pip install uv \
-    && uv sync
+RUN python -m pip install uv
+
+# Install torch first (largest dep) to isolate failures
+RUN uv pip install --system "torch @ https://download.pytorch.org/whl/cpu/torch-2.10.0%2Bcpu-cp311-cp311-manylinux_2_28_x86_64.whl"
+
+# Then sync the rest of the dependencies
+RUN uv sync
 
 RUN if [ -d ".venv" ]; then mkdir -p "$(dirname ${VENV_PATH})" && mv -T .venv "${VENV_PATH}"; fi
 
