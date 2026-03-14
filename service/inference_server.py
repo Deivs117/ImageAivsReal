@@ -7,10 +7,11 @@ Replaces the mock servicer with a real inference pipeline:
 - Returns ERROR status with error_message on inference failure (no crash)
 
 Env vars:
-    HF_MODEL_ID       - HuggingFace model ID (default: Ateeqq/ai-vs-human-image-detector)
-    GRPC_LOG_LEVEL    - Logging level (default: INFO)
-    GRPC_SERVER_HOST  - Server host (default: localhost)
-    GRPC_SERVER_PORT  - Server port (default: 50051)
+    HF_MODEL_ID      - HuggingFace model ID
+                       (default: Ateeqq/ai-vs-human-image-detector)
+    GRPC_LOG_LEVEL   - Logging level (default: INFO)
+    GRPC_SERVER_HOST - Server host (default: localhost)
+    GRPC_SERVER_PORT - Server port (default: 50051)
 
 Usage:
     uv run python -m service.inference_server
@@ -25,12 +26,15 @@ from dotenv import load_dotenv
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 # Add proto/generated to path so gRPC stubs can be imported
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'proto', 'generated'))
+sys.path.insert(
+    0,
+    os.path.join(os.path.dirname(__file__), '..', 'proto', 'generated'),
+)
 
-import inference_pb2
-import inference_pb2_grpc
+import inference_pb2  # noqa: E402
+import inference_pb2_grpc  # noqa: E402
 
-from inference.inference_engine import run_inference
+from inference.inference_engine import run_inference  # noqa: E402
 
 load_dotenv()
 
@@ -46,7 +50,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
+class AiVsRealClassifierServicer(
+    inference_pb2_grpc.AiVsRealClassifierServicer
+):
     """gRPC servicer that performs real model inference using HuggingFace."""
 
     def __init__(self, model=None, processor=None):
@@ -61,9 +67,16 @@ class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
             self.processor = processor
             logger.info('Using injected model and processor.')
         else:
-            logger.info('Loading model and processor from HuggingFace: %s', HF_MODEL_ID)
-            self.processor = AutoImageProcessor.from_pretrained(HF_MODEL_ID)
-            self.model = AutoModelForImageClassification.from_pretrained(HF_MODEL_ID)
+            logger.info(
+                'Loading model and processor from HuggingFace: %s',
+                HF_MODEL_ID,
+            )
+            self.processor = AutoImageProcessor.from_pretrained(
+                HF_MODEL_ID
+            )
+            self.model = AutoModelForImageClassification.from_pretrained(
+                HF_MODEL_ID
+            )
             logger.info('Model and processor loaded successfully.')
 
     def ClassifyImage(self, request, context):
@@ -73,7 +86,7 @@ class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
             request.filename,
         )
 
-        # Do not process requests that have already been cancelled by the client.
+        # Do not process requests cancelled by the client.
         if not context.is_active():
             logger.warning(
                 'Request cancelled before processing: image_id=%s',
@@ -86,10 +99,12 @@ class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
             return inference_pb2.ClassificationResponse()
 
         try:
-            result = run_inference(request.image_data, self.model, self.processor)
+            result = run_inference(
+                request.image_data, self.model, self.processor
+            )
         except Exception as exc:
-            # Unexpected error inside the inference pipeline: report as INTERNAL.
-            # Use context.set_code so the client receives a gRPC-level error.
+            # Unexpected error in the inference pipeline: report INTERNAL.
+            # Use context.set_code so the client receives a gRPC error.
             logger.exception(
                 'Unexpected error during inference for image_id=%s: %s',
                 request.image_id,
@@ -131,12 +146,16 @@ class AiVsRealClassifierServicer(inference_pb2_grpc.AiVsRealClassifierServicer):
                 error_message=error_msg,
             )
 
-        # Map scores dict to proto fields - normalize label keys to lowercase
+        # Map scores dict to proto fields - normalize label keys
         scores = {k.lower(): v for k, v in result['scores'].items()}
         prob_ai = float(scores.get('ai', 0.0))
-        # The model may return 'human' or the shorter alias 'hum' for the
-        # real/human class; check both keys to get the correct probability.
-        prob_human_val = scores.get('human') if 'human' in scores else scores.get('hum', 0.0)
+        # The model may return 'human' or the shorter alias 'hum'
+        # for the real/human class; check both keys.
+        prob_human_val = (
+            scores.get('human')
+            if 'human' in scores
+            else scores.get('hum', 0.0)
+        )
         prob_human = float(prob_human_val)
 
         # Confidence = score of winning class
@@ -192,7 +211,9 @@ def serve(host=None, port=None, model=None, processor=None):
             ("grpc.max_receive_message_length", _MAX_MSG_BYTES),
         ],
     )
-    inference_pb2_grpc.add_AiVsRealClassifierServicer_to_server(servicer, server)
+    inference_pb2_grpc.add_AiVsRealClassifierServicer_to_server(
+        servicer, server
+    )
     address = f'{host}:{port}'
     server.add_insecure_port(address)
     server.start()

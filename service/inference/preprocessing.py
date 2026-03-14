@@ -1,5 +1,6 @@
 """
-Modulo de preprocesamiento de imagen para el modelo dima806/ai_vs_real_image_detection.
+Modulo de preprocesamiento de imagen para el modelo
+dima806/ai_vs_real_image_detection.
 
 Funcion reutilizable que transforma una imagen PIL (o bytes) en tensores
 compatibles con el modelo ViT de Hugging Face, lista para inferencia.
@@ -19,6 +20,7 @@ from typing import Union
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
 
 def preprocess_image(
     image: Union[Image.Image, bytes],
@@ -42,9 +44,11 @@ def preprocess_image(
 
     Raises:
         TypeError: Si image no es PIL.Image.Image ni bytes.
-        ValueError: Si los bytes no pueden decodificarse como imagen valida,
-            o si el processor retorna un resultado vacio/inesperado.
-        RuntimeError: Si ocurre un error inesperado durante el preprocesamiento.
+        ValueError: Si los bytes no pueden decodificarse como imagen
+            valida, o si el processor retorna un resultado
+            vacio/inesperado.
+        RuntimeError: Si ocurre un error inesperado durante el
+            preprocesamiento.
 
     Example:
         >>> from PIL import Image
@@ -69,12 +73,15 @@ def preprocess_image(
         pil_image = image
     else:
         raise TypeError(
-            f"Se esperaba PIL.Image.Image o bytes, se recibio {type(image).__name__}."
+            "Se esperaba PIL.Image.Image o bytes, "
+            f"se recibio {type(image).__name__}."
         )
 
     # 2. Asegurar modo RGB
     if pil_image.mode != "RGB":
-        logger.debug("Convirtiendo imagen de modo '%s' a 'RGB'.", pil_image.mode)
+        logger.debug(
+            "Convirtiendo imagen de modo '%s' a 'RGB'.", pil_image.mode
+        )
         pil_image = pil_image.convert("RGB")
 
     # 3. Aplicar processor de Hugging Face
@@ -82,7 +89,8 @@ def preprocess_image(
         inputs = processor(images=pil_image, return_tensors="pt")
     except Exception as exc:
         raise RuntimeError(
-            f"Error al procesar la imagen con el processor de Hugging Face: {exc}"
+            "Error al procesar la imagen con el processor "
+            f"de Hugging Face: {exc}"
         ) from exc
 
     # 4. Validar salida
