@@ -39,7 +39,7 @@ from typing import Union
 import torch
 from PIL import Image
 
-from inference.preprocessing import preprocess_image
+from .preprocessing import preprocess_image
 
 logger = logging.getLogger(__name__)
 
