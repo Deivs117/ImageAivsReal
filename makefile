@@ -104,7 +104,7 @@ inference:
 
 mlflow:
 	@echo "Running MLflow tracking server..."
-	uv run mlflow ui --host 127.0.0.1 --port 5000
+	uv run mlflow ui --host 127.0.0.1 --port 5000 --backend-store-uri sqlite:///mlflow.db
 
 healthcheck:
 	@echo "Running health check..."
