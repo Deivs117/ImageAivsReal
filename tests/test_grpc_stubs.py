@@ -11,6 +11,7 @@ import inference_pb2_grpc
 
 
 def test_import_inference_pb2():
+    """Verify that the inference_pb2 module can be imported."""
     # Arrange
     module_name = 'inference_pb2'
 
@@ -22,6 +23,7 @@ def test_import_inference_pb2():
 
 
 def test_import_inference_pb2_grpc():
+    """Verify that the inference_pb2_grpc module can be imported."""
     # Arrange
     module_name = 'inference_pb2_grpc'
 
@@ -33,6 +35,7 @@ def test_import_inference_pb2_grpc():
 
 
 def test_image_request_creation():
+    """Verify that an ImageRequest message can be created with valid fields."""
     # Arrange
     image_id = 'img-001'
     filename = 'photo.jpg'
@@ -52,6 +55,7 @@ def test_image_request_creation():
 
 
 def test_performance_metrics_creation():
+    """Verify that a PerformanceMetrics message can be created."""
     # Arrange
     preprocess_time_ms = 10
     inference_time_ms = 50
@@ -71,6 +75,7 @@ def test_performance_metrics_creation():
 
 
 def test_classification_response_creation():
+    """Verify that a ClassificationResponse with OK status is created."""
     # Arrange
     metrics = inference_pb2.PerformanceMetrics(
         preprocess_time_ms=10,
@@ -100,6 +105,7 @@ def test_classification_response_creation():
 
 
 def test_classification_response_with_error():
+    """Verify that a ClassificationResponse with ERROR status is created."""
     # Arrange
     error_message = 'Image format not supported'
 
@@ -115,6 +121,7 @@ def test_classification_response_with_error():
 
 
 def test_result_status_enum():
+    """Verify that ResultStatus enum values have the expected integer codes."""
     # Arrange
     result_status = inference_pb2.ResultStatus
 
@@ -130,6 +137,7 @@ def test_result_status_enum():
 
 
 def test_aivs_real_classifier_service_exists():
+    """Verify that AiVsRealClassifierServicer exposes ClassifyImage."""
     # Arrange
     servicer_class = inference_pb2_grpc.AiVsRealClassifierServicer
 

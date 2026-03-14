@@ -36,11 +36,17 @@ def _make_dummy_response(status_ok: bool = True) -> MagicMock:
 # TestGRPCClientConnection
 # ---------------------------------------------------------------------------
 
+
 class TestGRPCClientConnection:
+    """Tests for GRPCClient connection and initialisation."""
+
     @patch("app.clientGrpc.grpc.insecure_channel")
     @patch("app.clientGrpc.grpc.channel_ready_future")
     @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
-    def test_conexion_exitosa(self, mock_stub_cls, mock_ready, mock_channel):
+    def test_conexion_exitosa(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        """Successful connection must set _stub to a non-None value."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         mock_stub_cls.return_value = MagicMock()
@@ -54,9 +60,14 @@ class TestGRPCClientConnection:
 
     @patch("app.clientGrpc.grpc.insecure_channel")
     @patch("app.clientGrpc.grpc.channel_ready_future")
-    def test_timeout_lanza_grpc_client_error(self, mock_ready, mock_channel):
+    def test_timeout_lanza_grpc_client_error(
+        self, mock_ready, mock_channel
+    ):
+        """A connection timeout must raise GRPCClientError."""
         # Arrange
-        mock_ready.return_value.result.side_effect = Exception("connection timed out")
+        mock_ready.return_value.result.side_effect = Exception(
+            "connection timed out"
+        )
 
         # Act / Assert
         with pytest.raises(GRPCClientError):
@@ -65,7 +76,10 @@ class TestGRPCClientConnection:
     @patch("app.clientGrpc.grpc.insecure_channel")
     @patch("app.clientGrpc.grpc.channel_ready_future")
     @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
-    def test_close_limpia_canal(self, mock_stub_cls, mock_ready, mock_channel):
+    def test_close_limpia_canal(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        """close() must set _channel and _stub to None."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         mock_stub_cls.return_value = MagicMock()
@@ -81,7 +95,10 @@ class TestGRPCClientConnection:
     @patch("app.clientGrpc.grpc.insecure_channel")
     @patch("app.clientGrpc.grpc.channel_ready_future")
     @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
-    def test_parametros_env_defaults(self, mock_stub_cls, mock_ready, mock_channel, monkeypatch):
+    def test_parametros_env_defaults(
+        self, mock_stub_cls, mock_ready, mock_channel, monkeypatch
+    ):
+        """Default env vars must use localhost:50051 with timeout 5."""
         # Arrange: clear env vars so defaults are used
         monkeypatch.delenv("GRPC_SERVER_HOST", raising=False)
         monkeypatch.delenv("GRPC_SERVER_PORT", raising=False)
@@ -101,7 +118,10 @@ class TestGRPCClientConnection:
     @patch("app.clientGrpc.grpc.insecure_channel")
     @patch("app.clientGrpc.grpc.channel_ready_future")
     @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
-    def test_parametros_env_custom(self, mock_stub_cls, mock_ready, mock_channel, monkeypatch):
+    def test_parametros_env_custom(
+        self, mock_stub_cls, mock_ready, mock_channel, monkeypatch
+    ):
+        """Custom env vars must override the default connection params."""
         # Arrange: set custom env vars
         monkeypatch.setenv("GRPC_SERVER_HOST", "myhost")
         monkeypatch.setenv("GRPC_SERVER_PORT", "9999")
@@ -121,7 +141,10 @@ class TestGRPCClientConnection:
     @patch("app.clientGrpc.grpc.insecure_channel")
     @patch("app.clientGrpc.grpc.channel_ready_future")
     @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
-    def test_constructor_override_env(self, mock_stub_cls, mock_ready, mock_channel, monkeypatch):
+    def test_constructor_override_env(
+        self, mock_stub_cls, mock_ready, mock_channel, monkeypatch
+    ):
+        """Constructor arguments must take precedence over env vars."""
         # Arrange: env has one value but constructor provides another
         monkeypatch.setenv("GRPC_SERVER_HOST", "envhost")
         monkeypatch.setenv("GRPC_SERVER_PORT", "1111")
@@ -141,15 +164,23 @@ class TestGRPCClientConnection:
 # TestGRPCClientClassifyImage
 # ---------------------------------------------------------------------------
 
+
 class TestGRPCClientClassifyImage:
+    """Tests for the classify_image method of GRPCClient."""
+
     @patch("app.clientGrpc.grpc.insecure_channel")
     @patch("app.clientGrpc.grpc.channel_ready_future")
     @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
-    def test_classify_image_exitoso(self, mock_stub_cls, mock_ready, mock_channel):
+    def test_classify_image_exitoso(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        """Successful classify_image must return status 'ok'."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
-        stub_instance.ClassifyImage.return_value = _make_dummy_response(status_ok=True)
+        stub_instance.ClassifyImage.return_value = (
+            _make_dummy_response(status_ok=True)
+        )
         mock_stub_cls.return_value = stub_instance
         client = GRPCClient(host="localhost", port=50051, timeout=1)
 
@@ -169,15 +200,20 @@ class TestGRPCClientClassifyImage:
     def test_classify_image_respuesta_error_servidor(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """Server ERROR response must return status 'error'."""
         # Arrange: server returns ERROR status
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
-        stub_instance.ClassifyImage.return_value = _make_dummy_response(status_ok=False)
+        stub_instance.ClassifyImage.return_value = (
+            _make_dummy_response(status_ok=False)
+        )
         mock_stub_cls.return_value = stub_instance
         client = GRPCClient(host="localhost", port=50051, timeout=1)
 
         # Act
-        result = client.classify_image(b"invalidbytes", filename="bad.jpg")
+        result = client.classify_image(
+            b"invalidbytes", filename="bad.jpg"
+        )
 
         # Assert
         assert result["status"] == "error"
@@ -190,6 +226,7 @@ class TestGRPCClientClassifyImage:
     def test_classify_image_rpc_error_lanza_excepcion(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """An RPC error during classify_image must raise GRPCClientError."""
         # Arrange: RPC call raises grpc.RpcError
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
@@ -208,6 +245,7 @@ class TestGRPCClientClassifyImage:
     def test_classify_image_sin_stub_lanza_excepcion(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """classify_image without a stub must raise GRPCClientError."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         mock_stub_cls.return_value = MagicMock()
@@ -224,10 +262,13 @@ class TestGRPCClientClassifyImage:
     def test_classify_image_devuelve_campos_esperados(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """classify_image result must contain all expected schema keys."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
-        stub_instance.ClassifyImage.return_value = _make_dummy_response(status_ok=True)
+        stub_instance.ClassifyImage.return_value = (
+            _make_dummy_response(status_ok=True)
+        )
         mock_stub_cls.return_value = stub_instance
         client = GRPCClient(host="localhost", port=50051, timeout=1)
 
@@ -258,10 +299,13 @@ class TestGRPCClientClassifyImage:
     def test_classify_image_probabilidades_en_rango(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """Probability values must be in [0,1] and sum to ~1.0."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
-        stub_instance.ClassifyImage.return_value = _make_dummy_response(status_ok=True)
+        stub_instance.ClassifyImage.return_value = (
+            _make_dummy_response(status_ok=True)
+        )
         mock_stub_cls.return_value = stub_instance
         client = GRPCClient(host="localhost", port=50051, timeout=1)
 
@@ -280,10 +324,13 @@ class TestGRPCClientClassifyImage:
     def test_classify_image_genera_image_id_si_no_se_pasa(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """classify_image must auto-generate image_id when not provided."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
-        stub_instance.ClassifyImage.return_value = _make_dummy_response(status_ok=True)
+        stub_instance.ClassifyImage.return_value = (
+            _make_dummy_response(status_ok=True)
+        )
         mock_stub_cls.return_value = stub_instance
         client = GRPCClient(host="localhost", port=50051, timeout=1)
 
@@ -301,23 +348,30 @@ class TestGRPCClientClassifyImage:
 # TestGRPCClientErrorMessages
 # ---------------------------------------------------------------------------
 
-def _make_rpc_error(code: grpc.StatusCode, details: str = "detail") -> grpc.RpcError:
-    """Create a real grpc.RpcError subclass instance with a specific status code."""
+def _make_rpc_error(
+    code: grpc.StatusCode, details: str = "detail"
+) -> grpc.RpcError:
+    """Create a grpc.RpcError subclass with a specific status code."""
 
     class _FakeRpcError(grpc.RpcError):
+        """Fake RpcError for testing error-message formatting."""
+
         def code(self):
+            """Return the configured gRPC status code."""
             return code
 
         def details(self):
+            """Return the configured error detail string."""
             return details
 
     return _FakeRpcError()
 
 
 class TestGRPCClientErrorMessages:
-    """Tests for _grpc_error_message and status-code-specific error handling."""
+    """Tests for _grpc_error_message and status-code error handling."""
 
     def test_grpc_error_message_deadline_exceeded(self):
+        """DEADLINE_EXCEEDED must produce a timeout-related message."""
         # Arrange
         err = _make_rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED)
         # Act
@@ -326,14 +380,19 @@ class TestGRPCClientErrorMessages:
         assert "timeout" in msg.lower() or "excedió" in msg.lower()
 
     def test_grpc_error_message_unavailable(self):
+        """UNAVAILABLE must produce a server-not-available message."""
         # Arrange
         err = _make_rpc_error(grpc.StatusCode.UNAVAILABLE)
         # Act
         msg = _grpc_error_message(err)
         # Assert: message mentions server not available
-        assert "disponible" in msg.lower() or "unavailable" in msg.lower()
+        assert (
+            "disponible" in msg.lower()
+            or "unavailable" in msg.lower()
+        )
 
     def test_grpc_error_message_invalid_argument(self):
+        """INVALID_ARGUMENT must produce an invalid-payload message."""
         # Arrange
         err = _make_rpc_error(grpc.StatusCode.INVALID_ARGUMENT)
         # Act
@@ -342,6 +401,7 @@ class TestGRPCClientErrorMessages:
         assert "inválido" in msg.lower() or "invalid" in msg.lower()
 
     def test_grpc_error_message_internal(self):
+        """INTERNAL must produce an internal/server-error message."""
         # Arrange
         err = _make_rpc_error(grpc.StatusCode.INTERNAL)
         # Act
@@ -350,14 +410,18 @@ class TestGRPCClientErrorMessages:
         assert "interno" in msg.lower() or "internal" in msg.lower()
 
     def test_grpc_error_message_unknown_code_includes_code_name(self):
+        """Unknown status code must fall back to a generic message."""
         # Arrange: use a status code without a predefined message
-        err = _make_rpc_error(grpc.StatusCode.NOT_FOUND, details="resource missing")
+        err = _make_rpc_error(
+            grpc.StatusCode.NOT_FOUND, details="resource missing"
+        )
         # Act
         msg = _grpc_error_message(err)
         # Assert: falls back to generic message with code name
         assert "NOT_FOUND" in msg or "resource missing" in msg
 
     def test_grpc_error_message_returns_string(self):
+        """_grpc_error_message must always return a string."""
         # Arrange
         err = _make_rpc_error(grpc.StatusCode.CANCELLED)
         # Act / Assert
@@ -369,6 +433,7 @@ class TestGRPCClientErrorMessages:
     def test_classify_image_deadline_exceeded_mensaje_amigable(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """DEADLINE_EXCEEDED must surface a friendly timeout message."""
         # Arrange: RPC raises DEADLINE_EXCEEDED
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
@@ -381,7 +446,8 @@ class TestGRPCClientErrorMessages:
         # Act / Assert
         with pytest.raises(GRPCClientError) as exc_info:
             client.classify_image(b"fakebytes")
-        assert "timeout" in str(exc_info.value).lower() or "excedió" in str(exc_info.value).lower()
+        msg = str(exc_info.value).lower()
+        assert "timeout" in msg or "excedió" in msg
         client.close()
 
     @patch("app.clientGrpc.grpc.insecure_channel")
@@ -390,6 +456,7 @@ class TestGRPCClientErrorMessages:
     def test_classify_image_unavailable_mensaje_amigable(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """UNAVAILABLE must surface a friendly unavailable message."""
         # Arrange: RPC raises UNAVAILABLE
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
@@ -402,7 +469,8 @@ class TestGRPCClientErrorMessages:
         # Act / Assert
         with pytest.raises(GRPCClientError) as exc_info:
             client.classify_image(b"fakebytes")
-        assert "disponible" in str(exc_info.value).lower() or "unavailable" in str(exc_info.value).lower()
+        msg = str(exc_info.value).lower()
+        assert "disponible" in msg or "unavailable" in msg
         client.close()
 
     @patch("app.clientGrpc.grpc.insecure_channel")
@@ -411,6 +479,7 @@ class TestGRPCClientErrorMessages:
     def test_classify_image_invalid_argument_mensaje_amigable(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """INVALID_ARGUMENT must surface a friendly invalid-image message."""
         # Arrange: RPC raises INVALID_ARGUMENT
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
@@ -423,7 +492,8 @@ class TestGRPCClientErrorMessages:
         # Act / Assert
         with pytest.raises(GRPCClientError) as exc_info:
             client.classify_image(b"badbytes")
-        assert "inválido" in str(exc_info.value).lower() or "invalid" in str(exc_info.value).lower()
+        msg = str(exc_info.value).lower()
+        assert "inválido" in msg or "invalid" in msg
         client.close()
 
     @patch("app.clientGrpc.grpc.insecure_channel")
@@ -431,8 +501,11 @@ class TestGRPCClientErrorMessages:
     def test_connect_future_timeout_lanza_grpc_client_error(
         self, mock_ready, mock_channel
     ):
+        """FutureTimeoutError during connect must raise GRPCClientError."""
         # Arrange: channel_ready_future raises FutureTimeoutError
-        mock_ready.return_value.result.side_effect = grpc.FutureTimeoutError()
+        mock_ready.return_value.result.side_effect = (
+            grpc.FutureTimeoutError()
+        )
 
         # Act / Assert
         with pytest.raises(GRPCClientError) as exc_info:
@@ -444,22 +517,30 @@ class TestGRPCClientErrorMessages:
 # TestGRPCClientClassifyImageSafe
 # ---------------------------------------------------------------------------
 
+
 class TestGRPCClientClassifyImageSafe:
     """Tests for the classify_image_safe convenience method."""
 
     @patch("app.clientGrpc.grpc.insecure_channel")
     @patch("app.clientGrpc.grpc.channel_ready_future")
     @patch("app.clientGrpc.inference_pb2_grpc.AiVsRealClassifierStub")
-    def test_safe_retorna_dict_en_exito(self, mock_stub_cls, mock_ready, mock_channel):
+    def test_safe_retorna_dict_en_exito(
+        self, mock_stub_cls, mock_ready, mock_channel
+    ):
+        """classify_image_safe must return a dict with status 'ok'."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
-        stub_instance.ClassifyImage.return_value = _make_dummy_response(status_ok=True)
+        stub_instance.ClassifyImage.return_value = (
+            _make_dummy_response(status_ok=True)
+        )
         mock_stub_cls.return_value = stub_instance
         client = GRPCClient(host="localhost", port=50051, timeout=1)
 
         # Act
-        result = client.classify_image_safe(b"fakebytes", filename="test.jpg")
+        result = client.classify_image_safe(
+            b"fakebytes", filename="test.jpg"
+        )
 
         # Assert
         assert isinstance(result, dict)
@@ -472,6 +553,7 @@ class TestGRPCClientClassifyImageSafe:
     def test_safe_no_lanza_en_error_rpc(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """classify_image_safe must not raise on an RPC error."""
         # Arrange: RPC raises UNAVAILABLE
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
@@ -495,6 +577,7 @@ class TestGRPCClientClassifyImageSafe:
     def test_safe_error_tiene_campos_esperados(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """classify_image_safe error result must contain all schema keys."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
@@ -503,7 +586,9 @@ class TestGRPCClientClassifyImageSafe:
         client = GRPCClient(host="localhost", port=50051, timeout=1)
 
         # Act
-        result = client.classify_image_safe(b"fakebytes", image_id="img-safe")
+        result = client.classify_image_safe(
+            b"fakebytes", image_id="img-safe"
+        )
 
         # Assert: all schema keys must be present
         expected_keys = (
@@ -527,6 +612,7 @@ class TestGRPCClientClassifyImageSafe:
     def test_safe_imagen_id_preservado_en_error(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """image_id must be preserved in the error result."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
@@ -535,7 +621,9 @@ class TestGRPCClientClassifyImageSafe:
         client = GRPCClient(host="localhost", port=50051, timeout=1)
 
         # Act
-        result = client.classify_image_safe(b"fakebytes", image_id="img-preserve-me")
+        result = client.classify_image_safe(
+            b"fakebytes", image_id="img-preserve-me"
+        )
 
         # Assert
         assert result["image_id"] == "img-preserve-me"
@@ -547,6 +635,7 @@ class TestGRPCClientClassifyImageSafe:
     def test_safe_lote_continua_tras_imagen_invalida(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """Batch must not abort after one failed classify_image_safe call."""
         # Arrange: first call raises, second call succeeds
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
@@ -558,8 +647,12 @@ class TestGRPCClientClassifyImageSafe:
         client = GRPCClient(host="localhost", port=50051, timeout=1)
 
         # Act: process two images; batch must not be aborted
-        result_bad = client.classify_image_safe(b"bad", filename="bad.jpg")
-        result_ok = client.classify_image_safe(b"good", filename="good.jpg")
+        result_bad = client.classify_image_safe(
+            b"bad", filename="bad.jpg"
+        )
+        result_ok = client.classify_image_safe(
+            b"good", filename="good.jpg"
+        )
 
         # Assert
         assert result_bad["status"] == "error"
@@ -572,6 +665,7 @@ class TestGRPCClientClassifyImageSafe:
     def test_safe_error_message_es_string(
         self, mock_stub_cls, mock_ready, mock_channel
     ):
+        """error_message in a safe-error result must be a non-empty string."""
         # Arrange
         mock_ready.return_value.result.return_value = True
         stub_instance = MagicMock()
