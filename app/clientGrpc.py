@@ -50,7 +50,9 @@ from dotenv import load_dotenv
 
 # Add proto/generated to sys.path so the generated stubs can be imported
 # regardless of the working directory.
-_PROTO_GENERATED = os.path.join(os.path.dirname(__file__), "..", "proto", "generated")
+_PROTO_GENERATED = os.path.join(
+    os.path.dirname(__file__), "..", "proto", "generated"
+)
 if _PROTO_GENERATED not in sys.path:
     sys.path.insert(0, _PROTO_GENERATED)
 
@@ -142,10 +144,25 @@ class GRPCClient:
         port: Optional[int] = None,
         timeout: Optional[int] = None,
     ) -> None:
+        """Connect to the gRPC server using provided or environment settings.
+
+        Args:
+            host: Server hostname. Falls back to GRPC_SERVER_HOST env var
+                or 'localhost'.
+            port: Server port. Falls back to GRPC_SERVER_PORT env var
+                or 50051.
+            timeout: Seconds for channel readiness and per-RPC deadline.
+                Falls back to GRPC_TIMEOUT env var or 5.
+
+        Raises:
+            GRPCClientError: If the server is not reachable within timeout.
+        """
         self.host: str = host or os.getenv("GRPC_SERVER_HOST", "localhost")
         self.port: int = port or int(os.getenv("GRPC_SERVER_PORT", "50051"))
         self.timeout: int = (
-            timeout if timeout is not None else int(os.getenv("GRPC_TIMEOUT", "5"))
+            timeout
+            if timeout is not None
+            else int(os.getenv("GRPC_TIMEOUT", "5"))
         )
         self._channel: Optional[grpc.Channel] = None
         self._stub = None
@@ -161,18 +178,29 @@ class GRPCClient:
     _MAX_MSG_BYTES = 50 * 1024 * 1024
 
     def _connect(self) -> None:
+        """Establish the gRPC channel and create the stub.
+
+        Raises:
+            GRPCClientError: If the channel cannot be established within
+                the configured timeout, or if a connection error occurs.
+        """
         target = f"{self.host}:{self.port}"
         try:
             self._channel = grpc.insecure_channel(
                 target,
                 options=[
                     ("grpc.max_send_message_length", self._MAX_MSG_BYTES),
-                    ("grpc.max_receive_message_length", self._MAX_MSG_BYTES),
+                    (
+                        "grpc.max_receive_message_length",
+                        self._MAX_MSG_BYTES,
+                    ),
                 ],
             )
             ready_future = grpc.channel_ready_future(self._channel)
             ready_future.result(timeout=self.timeout)
-            self._stub = inference_pb2_grpc.AiVsRealClassifierStub(self._channel)
+            self._stub = inference_pb2_grpc.AiVsRealClassifierStub(
+                self._channel
+            )
             LOG.info("Connected to gRPC server at %s", target)
         except grpc.FutureTimeoutError as exc:
             LOG.error(
@@ -183,12 +211,14 @@ class GRPCClient:
             )
             raise GRPCClientError(
                 f"Timeout conectando al servidor gRPC en {target} "
-                f"(timeout={self.timeout}s). Verifique que el servidor esté activo."
+                f"(timeout={self.timeout}s). "
+                "Verifique que el servidor esté activo."
             ) from exc
         except grpc.RpcError as exc:
             LOG.error("gRPC error connecting to %s: %s", target, exc)
             raise GRPCClientError(
-                f"Error gRPC al conectar con {target}: {_grpc_error_message(exc)}"
+                f"Error gRPC al conectar con {target}: "
+                f"{_grpc_error_message(exc)}"
             ) from exc
         except Exception as exc:
             LOG.exception("Could not connect to gRPC server at %s", target)
@@ -214,8 +244,12 @@ class GRPCClient:
             "prob_ai": float(response.prob_ai),
             # GUI / CSV schema uses "prob_real"; server returns "prob_human"
             "prob_real": float(response.prob_human),
-            "preprocess_time_ms": metrics.preprocess_time_ms if metrics else None,
-            "inference_time_ms": metrics.inference_time_ms if metrics else None,
+            "preprocess_time_ms": (
+                metrics.preprocess_time_ms if metrics else None
+            ),
+            "inference_time_ms": (
+                metrics.inference_time_ms if metrics else None
+            ),
             "error_message": error_msg,
         }
 
@@ -277,8 +311,14 @@ class GRPCClient:
         except GRPCClientError:
             raise
         except Exception as exc:
-            LOG.exception("Unexpected error sending image image_id=%s: %s", img_id, exc)
-            raise GRPCClientError(f"Error inesperado al enviar imagen: {exc}") from exc
+            LOG.exception(
+                "Unexpected error sending image image_id=%s: %s",
+                img_id,
+                exc,
+            )
+            raise GRPCClientError(
+                f"Error inesperado al enviar imagen: {exc}"
+            ) from exc
 
     def classify_image_safe(
         self,
@@ -313,7 +353,9 @@ class GRPCClient:
         """
         img_id = image_id or str(uuid.uuid4())
         try:
-            return self.classify_image(image_bytes, filename=filename, image_id=img_id)
+            return self.classify_image(
+                image_bytes, filename=filename, image_id=img_id
+            )
         except GRPCClientError as err:
             LOG.warning(
                 "classify_image_safe: error for image_id=%s filename=%s: %s",
