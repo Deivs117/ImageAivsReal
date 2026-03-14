@@ -1,23 +1,23 @@
-﻿"""Streamlit app - AI vs Real image classifier.
+"""Streamlit app - AI vs Real image classifier.
 
-Orquestador principal. Solo conecta modulos, sin logica propia.
+Main orchestrator. Connects modules without containing business logic.
 
 Run with:
     streamlit run app/streamlit_app.py
 """
 import streamlit as st
 
-from ui_components import (
-    render_header,
-    render_disclaimer,
-    render_sidebar,
-    render_summary,
-    render_export_section,
-)
-from batch_upload import BatchStore, BatchUploader
 from batch_panel import inject_styles, render_batch_panel
 from batch_runner import BatchRunner
+from batch_upload import BatchStore, BatchUploader
 from result_table import ResultsTableBuilder
+from ui_components import (
+    render_disclaimer,
+    render_export_section,
+    render_header,
+    render_sidebar,
+    render_summary,
+)
 
 
 RESULTS_DF_KEY = "results_df"
@@ -31,7 +31,7 @@ render_disclaimer()
 
 client = render_sidebar()
 
-# --- 1) Carga de imagenes ---
+# --- 1) Image upload ---
 st.divider()
 st.header("1) Carga de imagenes")
 
@@ -47,7 +47,7 @@ if ANALYSIS_SUMMARY_KEY not in st.session_state:
 uploader = BatchUploader(store)
 uploader.render()
 
-# --- 2) Analisis ---
+# --- 2) Analysis ---
 st.divider()
 st.header("2) Analisis")
 
@@ -56,16 +56,21 @@ builder = ResultsTableBuilder()
 
 if items:
     if client is None:
-        st.warning("No hay conexion al servidor gRPC. Verifica que este corriendo.")
+        st.warning(
+            "No hay conexion al servidor gRPC. "
+            "Verifica que este corriendo."
+        )
         render_batch_panel(items)
     else:
         if st.button("Analizar imagenes"):
             runner = BatchRunner(store=store, client=client)
             summary = runner.run()
             st.session_state[ANALYSIS_SUMMARY_KEY] = summary
-            st.session_state[RESULTS_DF_KEY] = builder.from_batch_items(store.items())
-            # Trigger a clean rerun so render_batch_panel is only called once
-            # (avoids duplicate panel from the placeholder inside runner.run()).
+            st.session_state[RESULTS_DF_KEY] = (
+                builder.from_batch_items(store.items())
+            )
+            # Trigger a clean rerun so render_batch_panel is called once
+            # (avoids duplicate panel from placeholder inside runner.run)
             st.rerun()
 
         render_batch_panel(store.items())
@@ -80,7 +85,7 @@ if items:
             st.subheader("Resultados")
             st.dataframe(results_df, use_container_width=True)
 
-            # --- 3) Exportacion ---
+            # --- 3) Export ---
             render_export_section(results_df, builder)
 else:
     st.session_state[RESULTS_DF_KEY] = None
