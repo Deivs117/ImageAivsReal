@@ -3,6 +3,7 @@ venv/
 env/
 ENV/
 .venv
+gitlab-sp-imageaivsreal.json
 
 # Dependencias
 *.egg-info/
