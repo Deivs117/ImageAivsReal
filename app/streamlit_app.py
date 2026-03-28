@@ -23,7 +23,7 @@ from ui_components import (
 RESULTS_DF_KEY = "results_df"
 ANALYSIS_SUMMARY_KEY = "analysis_summary"
 
-st.set_page_config(page_title="Real vs AI Image Detector", layout="wide")
+st.set_page_config(page_title="Real vs AI Image Detector Prueba Git", layout="wide")
 inject_styles()
 
 render_header()
