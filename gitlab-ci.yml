@@ -1,0 +1,171 @@
+stages:
+  - uv-install
+  - test
+  - build
+  - deploy
+
+variables:
+  UV_VERSION: "0.10.12"
+  PYTHON_VERSION: "3.11"
+  BASE_LAYER: "trixie"
+  UV_LINK_MODE: "copy"
+  IMAGEN_NAME: "davids117/imageaivsreal"
+  IMAGE_TAG: "latest"
+
+uv-install:
+  stage: uv-install
+  variables:
+    UV_CACHE_DIR: .uv-cache
+  image: "ghcr.io/astral-sh/uv:${UV_VERSION}-python${PYTHON_VERSION}-${BASE_LAYER}"
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends make libglib2.0-0 libgl1 libxcb1
+  cache:
+    key:
+      files:
+        - uv.lock
+    paths:
+      - $UV_CACHE_DIR
+      - .venv/
+      - ~/.cache/pip/
+  script:
+    - echo "uv version:"
+    - uv --version || true
+    - echo "Running uv sync to build .venv (this may download deps including torch)..."
+    - uv sync
+    - echo "Attempting 'uv install' if applicable..."
+    - 'uv install || true'
+    - '[ -d ".venv" ] && echo ".venv created" || echo "Warning: .venv not found after uv sync"'
+  after_script:
+    - uv cache prune --ci || true
+
+run_test:
+  stage: test
+  image: "ghcr.io/astral-sh/uv:${UV_VERSION}-python${PYTHON_VERSION}-${BASE_LAYER}"
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends make libglib2.0-0 libgl1 libxcb1
+    - uv --version || true
+  script:
+    - make clean
+    - make grpc
+    - make test
+  cache:
+    key:
+      files:
+        - pyproject.toml
+        - uv.lock
+    paths:
+      - .venv/
+      - ~/.cache/pip/
+
+build_image:
+  stage: build
+  image: docker:29.3.0-cli
+  services:
+    - name: docker:29.3.0-dind
+      alias: docker
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: "tcp://docker:2375"
+  before_script:
+    - echo "Logging into Docker Hub as $REGISTRY_USER"
+    - echo "$REGISTRY_PASS" | docker login -u "$REGISTRY_USER" --password-stdin
+    # Login to ACR with credentials from CI variables (ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD)
+    - if [ -n "$ACR_LOGIN_SERVER" ] && [ -n "$ACR_USERNAME" ] && [ -n "$ACR_PASSWORD" ]; then echo "$ACR_PASSWORD" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USERNAME" --password-stdin; fi
+  script:
+    - |
+      set -euo pipefail
+
+      echo "Build step: creating image tags"
+      COMMIT_TAG="${CI_COMMIT_SHORT_SHA:-latest}"
+      IMAGE_DH="${IMAGEN_NAME}:${COMMIT_TAG}"
+      LATEST_DH="${IMAGEN_NAME}:${IMAGE_TAG}"
+
+      echo "Building image: $IMAGE_DH"
+      docker build -t "$IMAGE_DH" .
+
+      echo "Tagging latest: $LATEST_DH"
+      docker tag "$IMAGE_DH" "$LATEST_DH"
+
+      echo "Pushing to Docker Hub: $IMAGE_DH and $LATEST_DH"
+      docker push "$IMAGE_DH"
+      docker push "$LATEST_DH"
+
+      # Also push to ACR if configured
+      if [ -n "${ACR_LOGIN_SERVER:-}" ] && [ -n "${ACR_USERNAME:-}" ] && [ -n "${ACR_PASSWORD:-}" ]; then
+        REPO_NAME=${IMAGEN_NAME##*/}
+        IMAGE_ACR="$ACR_LOGIN_SERVER/$REPO_NAME:$COMMIT_TAG"
+        LATEST_ACR="$ACR_LOGIN_SERVER/$REPO_NAME:$IMAGE_TAG"
+        echo "Tagging for ACR: $IMAGE_ACR and $LATEST_ACR"
+        docker tag "$IMAGE_DH" "$IMAGE_ACR"
+        docker tag "$IMAGE_DH" "$LATEST_ACR"
+        echo "Pushing to ACR: $IMAGE_ACR and $LATEST_ACR"
+        docker push "$IMAGE_ACR"
+        docker push "$LATEST_ACR"
+      else
+        echo "ACR not configured in CI variables; skipping push to ACR"
+      fi
+  only:
+    - branches
+
+deploy_to_aci:
+  stage: deploy
+  image: mcr.microsoft.com/azure-cli:latest
+  before_script:
+    - az --version
+    - echo "Logging into Azure with Service Principal..."
+    - az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
+    - az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+  script:
+    - |
+      set -euo pipefail
+      echo "Using resource group: $AZURE_RESOURCE_GROUP"
+
+      ACI_NAME="${ACI_NAME:-img-aivsreal-app-aci}"
+      DNS_LABEL="${ACI_DNS_LABEL:-img-aivsreal-app}"
+      TAG="${CI_COMMIT_SHORT_SHA:-$IMAGE_TAG}"
+
+      # If ACR configured, use ACR image; else fallback to Docker Hub
+      if [ -n "${ACR_LOGIN_SERVER:-}" ]; then
+        REPO_NAME=${IMAGEN_NAME##*/}
+        IMAGE="$ACR_LOGIN_SERVER/$REPO_NAME:$TAG"
+      else
+        IMAGE="$IMAGEN_NAME:$TAG"
+      fi
+
+      echo "Deploying image: $IMAGE to ACI: $ACI_NAME (dns: $DNS_LABEL)"
+
+      # If exists → restart; if not → create (pass registry creds for ACR if needed)
+      if az container show --resource-group "$AZURE_RESOURCE_GROUP" --name "$ACI_NAME" >/dev/null 2>&1; then
+        echo "ACI exists — restarting to pull the new image..."
+        az container restart --resource-group "$AZURE_RESOURCE_GROUP" --name "$ACI_NAME"
+      else
+        echo "Creating ACI..."
+        if [ -n "${ACR_LOGIN_SERVER:-}" ]; then
+          az container create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$ACI_NAME" \
+            --image "$IMAGE" \
+            --dns-name-label "$DNS_LABEL" \
+            --ports 50051 8501 \
+            --registry-login-server "$ACR_LOGIN_SERVER" \
+            --registry-username "$ACR_USERNAME" \
+            --registry-password "$ACR_PASSWORD" \
+            --cpu 1 --memory 2 --os-type Linux
+        else
+          az container create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$ACI_NAME" \
+            --image "$IMAGE" \
+            --dns-name-label "$DNS_LABEL" \
+            --ports 50051 8501 \
+            --cpu 1 --memory 2 --os-type Linux
+        fi
+      fi
+
+      # Obtener y mostrar FQDN
+      FQDN=$(az container show --resource-group "$AZURE_RESOURCE_GROUP" --name "$ACI_NAME" --query ipAddress.fqdn -o tsv)
+      echo "Deployment finished."
+      echo " Streamlit: http://$FQDN:8501"
+      echo " gRPC endpoint: $FQDN:50051"
+  only:
+    - branches
