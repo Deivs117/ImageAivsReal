@@ -12,7 +12,7 @@ from report_pdf import build_pdf_bytes
 
 def render_header() -> None:
     """Render the app title and general description."""
-    st.title("Clasificacion de Imagenes (IA vs Real)")
+    st.title("Clasificacion de Imagenes (IA vs Real) Prueba")
     st.write(
         "Interfaz web (MVP) para apoyar la "
         "**clasificacion probabilistica** de imagenes como "
